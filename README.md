@@ -2,7 +2,7 @@
 
 Multi-label change classification on aerial RGB image pairs — course project for BLM5135 (Deep Learning and Neural Networks Fundamentals).
 
-Given two RGB images of the same scene captured at different times, the model predicts three independent label families simultaneously: objects (13 classes), events (13 classes), and attributes (25 classes). Examples showing no significant change carry all-zero label vectors across every family. The task is multi-label, so outputs use sigmoid activations throughout.
+Given two RGB images of the same scene captured at different times, the model predicts three independent label families simultaneously: objects (12 classes), events (12 classes), and attributes (24 classes). Examples showing no significant change carry all-zero label vectors across every family. The task is multi-label, so outputs use sigmoid activations throughout.
 
 ## Repository layout
 
