@@ -51,6 +51,13 @@ class SiameseEncoder(nn.Module):
         self.name = name
         self.dim = self.backbone.num_features
 
+        # The backbone's ``head`` module (pre-logits LayerNorm + classifier
+        # FC) is bypassed by ``forward_features``. Freeze it so its weights
+        # are not touched by optimizer weight-decay updates.
+        if hasattr(self.backbone, "head"):
+            for p in self.backbone.head.parameters():
+                p.requires_grad_(False)
+
     def forward(self, a: Tensor, b: Tensor) -> tuple[Tensor, Tensor]:
         if a.shape != b.shape:
             raise ValueError(f"A and B shape mismatch: {tuple(a.shape)} vs {tuple(b.shape)}")
@@ -63,3 +70,62 @@ class SiameseEncoder(nn.Module):
         """Return ``(mean, std)`` for input normalization, from the backbone's timm config."""
         cfg = timm.data.resolve_model_data_config(self.backbone)
         return tuple(cfg["mean"]), tuple(cfg["std"])
+
+
+def _enhanced_4way_fusion(fa_vec: Tensor, fb_vec: Tensor) -> Tensor:
+    """Return ``concat(fA, fB, |fA - fB|, fA ⊙ fB)`` along the last dim."""
+    return torch.cat([fa_vec, fb_vec, (fa_vec - fb_vec).abs(), fa_vec * fb_vec], dim=-1)
+
+
+class Phase1Model(nn.Module):
+    """Phase 1 single-task model.
+
+    Siamese encoder → global average pool → 4-way fusion
+    ``[fA; fB; |fA - fB|; fA ⊙ fB]`` → FusionMLP → family head (``n_classes``
+    sigmoid logits) + auxiliary no-change head (1 sigmoid logit).
+
+    The same class template is reused for Object (12), Event (12), and
+    Attribute (24) — only ``cfg['experiment']['n_classes']`` differs.
+
+    Expects the following cfg keys:
+        ``experiment.n_classes``: int, head output width.
+        ``model.backbone``: timm checkpoint name.
+        ``model.pretrained``: bool.
+        ``model.droppath``: float (StochasticDepth rate).
+        ``model.fusion_dim``: int (FusionMLP hidden width).
+        ``model.dropout``: float (FusionMLP dropout).
+    """
+
+    def __init__(self, cfg: dict):
+        super().__init__()
+        model_cfg = cfg.get("model", {})
+        n_classes = cfg["experiment"]["n_classes"]
+
+        self.encoder = SiameseEncoder(
+            name=model_cfg.get("backbone", "convnextv2_tiny.fcmae_ft_in22k_in1k"),
+            pretrained=model_cfg.get("pretrained", True),
+            drop_path_rate=model_cfg.get("droppath", 0.1),
+        )
+        dim = self.encoder.dim
+        fusion_dim = model_cfg.get("fusion_dim", 512)
+        dropout = model_cfg.get("dropout", 0.3)
+
+        self.fusion = nn.Sequential(
+            nn.Linear(4 * dim, fusion_dim),
+            nn.LayerNorm(fusion_dim),
+            nn.GELU(),
+            nn.Dropout(dropout),
+        )
+        self.head_family = nn.Linear(fusion_dim, n_classes)
+        self.head_nochg = nn.Linear(fusion_dim, 1)
+
+    def forward(self, a: Tensor, b: Tensor) -> dict[str, Tensor]:
+        fa, fb = self.encoder(a, b)
+        fa_vec = fa.mean(dim=(2, 3))
+        fb_vec = fb.mean(dim=(2, 3))
+        v = _enhanced_4way_fusion(fa_vec, fb_vec)
+        feat = self.fusion(v)
+        return {
+            "logits_family": self.head_family(feat),
+            "logit_nochg": self.head_nochg(feat).squeeze(-1),
+        }
