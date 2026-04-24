@@ -1,0 +1,74 @@
+experiment:
+  name: phase1_object
+  phase: 1
+  family: object
+  n_classes: 12
+  seed: 42
+  output_dir: results/phase1_object/seed42
+
+data:
+  json_path: dataset/dataset.json
+  root: dataset/
+  vocab_path: configs/label_vocab.json
+  img_size: 224
+  num_workers: 4
+  pin_memory: true
+
+model:
+  backbone: convnextv2_tiny.fcmae_ft_in22k_in1k
+  pretrained: true
+  droppath: 0.1
+  fusion_dim: 512
+  dropout: 0.3
+
+loss:
+  family: asl
+  asl:
+    gamma_neg: 4
+    gamma_pos: 0
+    clip: 0.05
+  nochg_weight: 0.2
+
+train:
+  epochs: 40
+  batch_size: 32
+  grad_accum: 1
+  precision: bfloat16
+  optimizer: adamw
+  wd: 0.05
+  head_lr: 3.0e-4
+  backbone_lr: 3.0e-5
+  llrd: 0.8
+  warmup_epochs: 3
+  scheduler: cosine
+  min_lr: 1.0e-7
+  grad_clip: 1.0
+  ema_decay: 0.999
+  ema_warmup_steps: 1000
+  early_stop_patience: 10
+  early_stop_metric: val_macro_f1
+
+augment:
+  spatial:
+    hflip: 0.5
+    vflip: 0.5
+    rot90: 0.5
+    affine: 0.5
+    affine_deg: 5
+    affine_trans: 0.05
+  photometric:
+    p: 0.8
+    brightness: 0.2
+    contrast: 0.2
+    saturation: 0.2
+  cutmix:
+    p: 0.3
+    alpha: 1.0
+
+sampler:
+  type: weighted
+  weight_formula: "1/sqrt(1+n_pos)"
+
+eval:
+  threshold_sweep: [0.05, 0.95, 0.02]
+  tta: [orig, hflip, vflip, rot180]

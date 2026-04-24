@@ -122,6 +122,28 @@ class PairAug:
         return self.normalize(TF.to_tensor(a)), self.normalize(TF.to_tensor(b))
 
 
+class EvalTransform:
+    """Deterministic resize + normalize for val and test (no augmentation).
+
+    Same signature as ``PairAug.__call__``: takes two PIL images, returns
+    two normalized tensors.
+    """
+
+    def __init__(
+        self,
+        img_size: int = 224,
+        mean: Sequence[float] = (0.485, 0.456, 0.406),
+        std: Sequence[float] = (0.229, 0.224, 0.225),
+    ):
+        self.img_size = img_size
+        self.normalize = transforms.Normalize(mean=list(mean), std=list(std))
+
+    def __call__(self, a: Image.Image, b: Image.Image) -> tuple[Tensor, Tensor]:
+        a = a.resize((self.img_size, self.img_size), Image.BILINEAR)
+        b = b.resize((self.img_size, self.img_size), Image.BILINEAR)
+        return self.normalize(TF.to_tensor(a)), self.normalize(TF.to_tensor(b))
+
+
 def cutmix_pair(batch: dict, p: float = 0.3, alpha: float = 1.0) -> dict:
     """Apply pair-wise CutMix to an already-collated training batch.
 
