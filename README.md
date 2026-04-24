@@ -20,7 +20,7 @@ eval.py       Evaluation entry point
 ```
 conda create -n blm5135 python=3.11 -y
 conda activate blm5135
-pip install torch torchvision --index-url https://download.pytorch.org/whl/cu124
+pip install torch torchvision --index-url https://download.pytorch.org/whl/cu128
 pip install -r requirements.txt
 ```
 
