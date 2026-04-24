@@ -100,6 +100,127 @@ def leakage_report(json_path: str | Path) -> dict:
     return {"n_violations": len(violations), "examples": violations[:50]}
 
 
+def eda_report(json_path: str | Path, out_dir: str | Path) -> dict:
+    """Compute dataset statistics and write histograms to ``out_dir``.
+
+    Produces:
+      * ``object_histogram.png`` / ``event_histogram.png`` / ``attribute_histogram.png``
+        — per-family class-frequency bars, sorted descending.
+      * ``positives_per_sample.png`` — for each family, a histogram of how
+        many positive labels each sample carries.
+      * ``split_distribution.png`` — bar chart of split sizes with the
+        fraction of no-change samples per split.
+      * ``summary.json`` — the numerical report that backs every figure.
+
+    Returns the same dict that is written to ``summary.json``.
+    """
+    import matplotlib
+
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    from collections import Counter
+
+    path = Path(json_path)
+    out = Path(out_dir)
+    out.mkdir(parents=True, exist_ok=True)
+
+    with path.open("r", encoding="utf-8") as f:
+        blob = json.load(f)
+    records = blob["images"]
+
+    split_counts: dict[str, int] = Counter(r["split"] for r in records)
+    split_nochange: dict[str, int] = Counter(
+        r["split"] for r in records if r["changeflag"] == 0
+    )
+
+    family_hist: dict[str, Counter] = {fam: Counter() for fam in LABEL_FAMILIES}
+    pos_per_sample: dict[str, list[int]] = {fam: [] for fam in LABEL_FAMILIES}
+    for rec in records:
+        for fam in LABEL_FAMILIES:
+            labels = [l for l in rec.get(f"{fam}_labels", []) if l != _NONE_LABEL]
+            family_hist[fam].update(labels)
+            pos_per_sample[fam].append(len(labels))
+
+    # Per-family histograms (horizontal bar, sorted desc).
+    for fam in LABEL_FAMILIES:
+        items = sorted(family_hist[fam].items(), key=lambda kv: -kv[1])
+        labels = [k for k, _ in items]
+        counts = [v for _, v in items]
+        fig, ax = plt.subplots(figsize=(6, max(2.5, 0.3 * len(labels))))
+        ax.barh(range(len(labels)), counts, color="#3b82f6")
+        ax.set_yticks(range(len(labels)))
+        ax.set_yticklabels(labels)
+        ax.invert_yaxis()
+        ax.set_xlabel("positive count")
+        ax.set_title(f"{fam} label frequency (n={sum(counts)})")
+        for i, c in enumerate(counts):
+            ax.text(c, i, f" {c}", va="center", fontsize=8)
+        fig.tight_layout()
+        fig.savefig(out / f"{fam}_histogram.png", dpi=150)
+        plt.close(fig)
+
+    # Positives-per-sample histogram, one subplot per family.
+    fig, axes = plt.subplots(1, 3, figsize=(12, 3.5))
+    for ax, fam in zip(axes, LABEL_FAMILIES):
+        data = pos_per_sample[fam]
+        max_p = max(data) if data else 0
+        ax.hist(data, bins=range(max_p + 2), color="#10b981", edgecolor="white", align="left")
+        ax.set_title(f"{fam}")
+        ax.set_xlabel("positives / sample")
+        ax.set_ylabel("samples")
+        ax.set_xticks(range(max_p + 1))
+    fig.suptitle("positives per sample (zero = no-change for that family)")
+    fig.tight_layout()
+    fig.savefig(out / "positives_per_sample.png", dpi=150)
+    plt.close(fig)
+
+    # Split distribution with no-change fraction.
+    splits = ["train", "val", "test"]
+    total = [split_counts.get(s, 0) for s in splits]
+    nc = [split_nochange.get(s, 0) for s in splits]
+    change = [t - n for t, n in zip(total, nc)]
+    fig, ax = plt.subplots(figsize=(6, 3.5))
+    x = np.arange(len(splits))
+    ax.bar(x, change, label="change", color="#3b82f6")
+    ax.bar(x, nc, bottom=change, label="no-change", color="#cbd5e1")
+    for i, (c, n) in enumerate(zip(change, nc)):
+        ax.text(i, c + n, f"{c + n}", ha="center", va="bottom", fontsize=9)
+    ax.set_xticks(x)
+    ax.set_xticklabels(splits)
+    ax.set_ylabel("samples")
+    ax.set_title("split distribution (change vs no-change)")
+    ax.legend(loc="lower right")
+    fig.tight_layout()
+    fig.savefig(out / "split_distribution.png", dpi=150)
+    plt.close(fig)
+
+    summary = {
+        "n_records": len(records),
+        "split_counts": dict(split_counts),
+        "no_change_counts": dict(split_nochange),
+        "no_change_fraction": {
+            s: split_nochange.get(s, 0) / max(1, split_counts.get(s, 0)) for s in splits
+        },
+        "family_class_counts": {
+            fam: dict(sorted(family_hist[fam].items(), key=lambda kv: -kv[1]))
+            for fam in LABEL_FAMILIES
+        },
+        "positives_per_sample_stats": {
+            fam: {
+                "mean": float(np.mean(pos_per_sample[fam])),
+                "max": int(np.max(pos_per_sample[fam])) if pos_per_sample[fam] else 0,
+                "zero_count": int(sum(1 for p in pos_per_sample[fam] if p == 0)),
+            }
+            for fam in LABEL_FAMILIES
+        },
+    }
+    with (out / "summary.json").open("w", encoding="utf-8") as f:
+        json.dump(summary, f, indent=2, ensure_ascii=False)
+        f.write("\n")
+    return summary
+
+
 class BitempDataset(Dataset):
     """Bitemporal change classification dataset backed by ``dataset.json``.
 
@@ -359,6 +480,11 @@ def main(argv: list[str] | None = None) -> int:
     p_leak.add_argument("--json", required=True, help="path to dataset.json")
     p_leak.add_argument("--out", default=None, help="optional path to persist the JSON report")
     p_leak.set_defaults(func=_cmd_leakage_check)
+
+    p_eda = sub.add_parser("eda", help="per-family histograms, positives-per-sample, split stats")
+    p_eda.add_argument("--json", required=True, help="path to dataset.json")
+    p_eda.add_argument("--out", required=True, help="output directory for figures + summary.json")
+    p_eda.set_defaults(func=lambda a: (eda_report(a.json, a.out), 0)[1])
 
     args = parser.parse_args(argv)
     return args.func(args)
