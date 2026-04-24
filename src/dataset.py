@@ -10,13 +10,16 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+import math
+import random
 import sys
 from pathlib import Path
 from typing import Callable, Literal, Optional
 
+import numpy as np
 import torch
 from PIL import Image
-from torch.utils.data import Dataset
+from torch.utils.data import DataLoader, Dataset, WeightedRandomSampler
 from torchvision.transforms import functional as TF
 
 logger = logging.getLogger(__name__)
@@ -178,6 +181,133 @@ class BitempDataset(Dataset):
             if idx is not None:
                 vec[idx] = 1.0
         return vec
+
+
+def _compute_sampler_weights(
+    records: list[dict], phase: int, family: Optional[str]
+) -> torch.Tensor:
+    """Per-sample weights for ``WeightedRandomSampler``.
+
+    Uses ``w_i = 1 / sqrt(1 + n_positives_i)`` per PROJECT_PLAN.md §4.3.
+    In Phase 1, ``n_positives`` counts positive labels in the target
+    family only; in Phase 2, it sums positives across all three families.
+    """
+    if phase == 1 and family is None:
+        raise ValueError("phase 1 requires cfg['experiment']['family']")
+
+    weights = torch.empty(len(records), dtype=torch.double)
+    for i, rec in enumerate(records):
+        if phase == 1:
+            n_pos = sum(
+                1 for label in rec.get(f"{family}_labels", []) if label != _NONE_LABEL
+            )
+        else:
+            n_pos = sum(
+                1
+                for fam in LABEL_FAMILIES
+                for label in rec.get(f"{fam}_labels", [])
+                if label != _NONE_LABEL
+            )
+        weights[i] = 1.0 / math.sqrt(1.0 + n_pos)
+    return weights
+
+
+def _worker_init_fn(worker_id: int) -> None:
+    """Deterministic per-worker seeding."""
+    seed = torch.utils.data.get_worker_info().seed % (2**32)
+    random.seed(seed + worker_id)
+    np.random.seed((seed + worker_id) % (2**32))
+
+
+def build_dataloaders(
+    cfg: dict,
+    transform_train: Optional[Callable] = None,
+    transform_eval: Optional[Callable] = None,
+) -> tuple[DataLoader, DataLoader, DataLoader]:
+    """Build ``(train, val, test)`` loaders from a config dict.
+
+    Train uses ``WeightedRandomSampler`` (see ``_compute_sampler_weights``).
+    Val and test iterate in dataset-order, no shuffling. The caller supplies
+    augmentation + normalization via ``transform_train`` and eval-time
+    resize + normalization via ``transform_eval``; both default to ``None``
+    so the ``BitempDataset`` fallback (resize + ToTensor, un-normalized)
+    runs — useful for smoke tests only.
+
+    Args:
+        cfg: Nested dict with ``data``, ``train``, and ``experiment`` keys
+            (see PROJECT_PLAN.md §10 for the schema).
+        transform_train: Optional ``(PIL, PIL) -> (Tensor, Tensor)`` callable
+            applied to the train split.
+        transform_eval: Optional eval-time transform applied to val and test.
+
+    Returns:
+        ``(train_loader, val_loader, test_loader)``.
+    """
+    data_cfg = cfg["data"]
+    train_cfg = cfg["train"]
+    exp_cfg = cfg["experiment"]
+
+    with Path(data_cfg["vocab_path"]).open("r", encoding="utf-8") as f:
+        vocab = json.load(f)
+
+    img_size = data_cfg.get("img_size", 224)
+    num_workers = data_cfg.get("num_workers", 4)
+    pin_memory = data_cfg.get("pin_memory", True)
+    batch_size = train_cfg["batch_size"]
+    seed = exp_cfg["seed"]
+    phase = exp_cfg.get("phase", 1)
+    family = exp_cfg.get("family")
+
+    common = {
+        "json_path": data_cfg["json_path"],
+        "root": data_cfg["root"],
+        "label_vocab": vocab,
+        "img_size": img_size,
+    }
+    train_ds = BitempDataset(split="train", transform=transform_train, **common)
+    val_ds = BitempDataset(split="val", transform=transform_eval, **common)
+    test_ds = BitempDataset(split="test", transform=transform_eval, **common)
+
+    weights = _compute_sampler_weights(train_ds.records, phase=phase, family=family)
+    sampler_gen = torch.Generator().manual_seed(seed)
+    sampler = WeightedRandomSampler(
+        weights=weights,
+        num_samples=len(train_ds),
+        replacement=True,
+        generator=sampler_gen,
+    )
+    loader_gen = torch.Generator().manual_seed(seed)
+
+    train_loader = DataLoader(
+        train_ds,
+        batch_size=batch_size,
+        sampler=sampler,
+        num_workers=num_workers,
+        pin_memory=pin_memory,
+        drop_last=True,
+        worker_init_fn=_worker_init_fn,
+        generator=loader_gen,
+        persistent_workers=num_workers > 0,
+    )
+    val_loader = DataLoader(
+        val_ds,
+        batch_size=batch_size,
+        shuffle=False,
+        num_workers=num_workers,
+        pin_memory=pin_memory,
+        worker_init_fn=_worker_init_fn,
+        persistent_workers=num_workers > 0,
+    )
+    test_loader = DataLoader(
+        test_ds,
+        batch_size=batch_size,
+        shuffle=False,
+        num_workers=num_workers,
+        pin_memory=pin_memory,
+        worker_init_fn=_worker_init_fn,
+        persistent_workers=num_workers > 0,
+    )
+    return train_loader, val_loader, test_loader
 
 
 def _cmd_build_vocab(args: argparse.Namespace) -> int:
