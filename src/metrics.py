@@ -1,14 +1,16 @@
 """Evaluation metrics.
 
-Provides ``compute_metrics`` and ``tune_thresholds_per_class``.
-``tta_forward`` (task 2.7) is added later.
+Provides ``compute_metrics``, ``tune_thresholds_per_class``, and
+``tta_forward``.
 """
 
 from __future__ import annotations
 
 import logging
+from typing import Sequence
 
 import numpy as np
+import torch
 from sklearn.metrics import (
     average_precision_score,
     f1_score,
@@ -129,3 +131,77 @@ def tune_thresholds_per_class(
         n, c, t, float(best.min()), float(np.median(best)), float(best.max()),
     )
     return best
+
+
+_TTA_OPS = ("orig", "hflip", "vflip", "rot180")
+
+
+def _apply_tta(x: torch.Tensor, op: str) -> torch.Tensor:
+    if op == "orig":
+        return x
+    if op == "hflip":
+        return torch.flip(x, dims=[-1])
+    if op == "vflip":
+        return torch.flip(x, dims=[-2])
+    if op == "rot180":
+        return torch.flip(x, dims=[-2, -1])
+    raise ValueError(f"unknown TTA op {op!r}; supported: {_TTA_OPS}")
+
+
+@torch.no_grad()
+def tta_forward(
+    model: torch.nn.Module,
+    batch: dict,
+    tta_ops: Sequence[str],
+) -> dict:
+    """Average sigmoid probabilities over geometric TTA passes.
+
+    For each op in ``tta_ops``, apply the same spatial transform to both
+    ``A`` and ``B`` (preserving correspondence), forward through
+    ``model``, sigmoid the outputs, and accumulate. The class labels are
+    invariant under the supported ops (h-flip, v-flip, 180° rotation),
+    so averaging is pure noise reduction.
+
+    Supported ops: ``"orig"``, ``"hflip"``, ``"vflip"``, ``"rot180"``.
+
+    Args:
+        model: a Phase-1 (or compatible) model returning a dict with
+            ``logits_family`` (``[B, C]``) and ``logit_nochg`` (``[B]``).
+        batch: dict with at least ``"A"`` and ``"B"`` tensors of shape
+            ``[B, 3, H, W]``, already on the model's device.
+        tta_ops: non-empty sequence of op names. Order is irrelevant
+            (the result is a mean).
+
+    Returns:
+        Dict with:
+            ``probs_family``: ``[B, C]`` averaged sigmoid probs (float32).
+            ``prob_nochg``:    ``[B]`` averaged sigmoid prob (float32).
+
+    Notes:
+        Caller is responsible for ``model.eval()`` and any autocast
+        context. ``no_grad`` is enforced by the decorator.
+    """
+    if len(tta_ops) == 0:
+        raise ValueError("tta_ops must be non-empty")
+    unknown = [op for op in tta_ops if op not in _TTA_OPS]
+    if unknown:
+        raise ValueError(f"unknown TTA ops: {unknown}; supported: {_TTA_OPS}")
+
+    a = batch["A"]
+    b = batch["B"]
+
+    probs_family_sum: torch.Tensor | None = None
+    prob_nochg_sum: torch.Tensor | None = None
+
+    for op in tta_ops:
+        out = model(_apply_tta(a, op), _apply_tta(b, op))
+        pf = torch.sigmoid(out["logits_family"].float())
+        pn = torch.sigmoid(out["logit_nochg"].float())
+        probs_family_sum = pf if probs_family_sum is None else probs_family_sum + pf
+        prob_nochg_sum = pn if prob_nochg_sum is None else prob_nochg_sum + pn
+
+    n = float(len(tta_ops))
+    return {
+        "probs_family": probs_family_sum / n,
+        "prob_nochg": prob_nochg_sum / n,
+    }
