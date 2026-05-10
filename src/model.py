@@ -159,6 +159,51 @@ class BITFusion(nn.Module):
         return self._cross_refine(fa, ta_r), self._cross_refine(fb, tb_r), refined
 
 
+class Query2LabelHead(nn.Module):
+    """Query2Label-style transformer-decoder classifier head.
+
+    One learnable query per class cross-attends to the supplied memory;
+    the per-query output is projected to a single sigmoid logit. Used
+    three times in Phase 2 (12 / 12 / 24 queries for object / event /
+    attribute) on a shared memory.
+
+    Per PROJECT_PLAN §5.1: one decoder layer, pre-LN, GELU, d_ff = 2·dim.
+    """
+
+    def __init__(
+        self,
+        n_classes: int,
+        dim: int = 512,
+        nhead: int = 8,
+        dim_ff: int | None = None,
+        dropout: float = 0.1,
+    ):
+        super().__init__()
+        if dim_ff is None:
+            dim_ff = 2 * dim
+        self.n_classes = n_classes
+        self.queries = nn.Parameter(torch.zeros(n_classes, dim))
+        nn.init.trunc_normal_(self.queries, std=0.02)
+        decoder_layer = nn.TransformerDecoderLayer(
+            d_model=dim,
+            nhead=nhead,
+            dim_feedforward=dim_ff,
+            dropout=dropout,
+            activation="gelu",
+            batch_first=True,
+            norm_first=True,
+        )
+        self.decoder = nn.TransformerDecoder(decoder_layer, num_layers=1)
+        self.proj = nn.Linear(dim, 1)
+
+    def forward(self, memory: Tensor) -> Tensor:
+        """``memory: [B, M, dim]`` → logits ``[B, n_classes]``."""
+        b = memory.shape[0]
+        q = self.queries.unsqueeze(0).expand(b, -1, -1)   # [B, N, dim]
+        out = self.decoder(tgt=q, memory=memory)           # [B, N, dim]
+        return self.proj(out).squeeze(-1)                  # [B, N]
+
+
 class Phase1Model(nn.Module):
     """Phase 1 single-task model.
 
