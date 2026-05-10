@@ -95,20 +95,34 @@ class UncertaintyWeightedLoss(nn.Module):
 
     _TASKS = ("obj", "evt", "attr", "nochg")
 
-    def __init__(self, init_log_sigma: float = 0.0):
+    def __init__(
+        self,
+        init_log_sigma: float = 0.0,
+        log_sigma_min: float = -2.0,
+        log_sigma_max: float = 2.0,
+    ):
         super().__init__()
         self.log_sigma = nn.Parameter(torch.full((4,), float(init_log_sigma)))
+        # Clamping range guards against the degenerate equilibrium where the
+        # regularizer ``+0.5·Σ log_σ²`` dominates and the model "trains" by
+        # shrinking log_σ instead of fitting tasks.
+        self.log_sigma_min = float(log_sigma_min)
+        self.log_sigma_max = float(log_sigma_max)
+
+    def _clamped(self) -> Tensor:
+        return self.log_sigma.clamp(self.log_sigma_min, self.log_sigma_max)
 
     def forward(self, losses: dict[str, Tensor]) -> Tensor:
         missing = [t for t in self._TASKS if t not in losses]
         if missing:
             raise KeyError(f"missing task losses: {missing}; got keys {list(losses)}")
         per_task = torch.stack([losses[t] for t in self._TASKS])   # [4]
-        precision = torch.exp(-self.log_sigma)                      # [4]
-        return 0.5 * (precision * per_task).sum() + 0.5 * self.log_sigma.sum()
+        log_sigma = self._clamped()
+        precision = torch.exp(-log_sigma)                           # [4]
+        return 0.5 * (precision * per_task).sum() + 0.5 * log_sigma.sum()
 
     def task_weights(self) -> dict[str, float]:
         """Current effective per-task weight (exp(-log_σ²)/2). For logging."""
         with torch.no_grad():
-            w = (0.5 * torch.exp(-self.log_sigma)).tolist()
+            w = (0.5 * torch.exp(-self._clamped())).tolist()
         return dict(zip(self._TASKS, w))

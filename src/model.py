@@ -197,14 +197,34 @@ class Query2LabelHead(nn.Module):
             norm_first=True,
         )
         self.decoder = nn.TransformerDecoder(decoder_layer, num_layers=1)
-        self.proj = nn.Linear(dim, 1)
+        # Linear projection without bias: per-class bias is learned separately
+        # (initializable to a class-prior logit via ``set_class_prior``) so we
+        # don't start every class at sigmoid(0)=0.5 — that biases multi-label
+        # ASL training toward "predict zero" before queries can differentiate.
+        self.proj = nn.Linear(dim, 1, bias=False)
+        self.class_bias = nn.Parameter(torch.zeros(n_classes))
 
     def forward(self, memory: Tensor) -> Tensor:
         """``memory: [B, M, dim]`` → logits ``[B, n_classes]``."""
         b = memory.shape[0]
         q = self.queries.unsqueeze(0).expand(b, -1, -1)   # [B, N, dim]
         out = self.decoder(tgt=q, memory=memory)           # [B, N, dim]
-        return self.proj(out).squeeze(-1)                  # [B, N]
+        return self.proj(out).squeeze(-1) + self.class_bias   # [B, N]
+
+    @torch.no_grad()
+    def set_class_prior(self, p_pos: Tensor, eps: float = 1e-3) -> None:
+        """Initialize ``class_bias`` so initial ``sigmoid`` output ≈ ``p_pos``.
+
+        ``p_pos`` is a ``[n_classes]`` tensor of empirical positive rates
+        on the training split. Probabilities are floored at ``eps`` to avoid
+        ``log(0)``; the resulting bias is the per-class logit ``log(p/(1-p))``.
+        """
+        if p_pos.shape != (self.n_classes,):
+            raise ValueError(
+                f"p_pos shape {tuple(p_pos.shape)} != ({self.n_classes},)"
+            )
+        p = p_pos.clamp(min=eps, max=1.0 - eps)
+        self.class_bias.data.copy_(torch.log(p / (1.0 - p)))
 
 
 class Phase1Model(nn.Module):
@@ -372,3 +392,14 @@ class Phase2Model(nn.Module):
         }
         out["logit_nochg"] = self.head_nochg(feat).squeeze(-1)
         return out
+
+    def set_class_priors(self, priors: dict[str, Tensor]) -> None:
+        """Initialize each Q2L head's per-class bias to the empirical prior.
+
+        ``priors[fam]`` is a ``[n_classes_fam]`` tensor of positive rates on
+        the training split. Heads not in ``priors`` are left at zero.
+        """
+        for fam, p in priors.items():
+            if fam not in self.heads:
+                raise KeyError(f"family {fam!r} not in heads ({list(self.heads)})")
+            self.heads[fam].set_class_prior(p)

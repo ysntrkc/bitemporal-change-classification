@@ -56,6 +56,33 @@ def _resolve_n_classes(cfg: dict, families: list[str]) -> dict[str, int]:
     return {fam: len(vocab[fam]) for fam in families}
 
 
+def _compute_class_priors(
+    records: list[dict], vocab: dict[str, list[str]], families: list[str]
+) -> dict[str, torch.Tensor]:
+    """Empirical per-class positive rate over the train split.
+
+    ``records[i]`` is one image's metadata with ``{family}_labels`` lists.
+    Returns ``{family: tensor[n_classes_fam]}`` of positive fractions, used
+    to initialize each Q2L head's per-class bias to ``logit(p_pos_c)`` so the
+    model doesn't start every class at sigmoid(0)=0.5 and immediately
+    collapse toward "predict zero" under ASL gradient pressure.
+    """
+    n = max(1, len(records))
+    priors: dict[str, torch.Tensor] = {}
+    for fam in families:
+        labels = vocab[fam]
+        idx = {lbl: i for i, lbl in enumerate(labels)}
+        counts = np.zeros(len(labels), dtype=np.float64)
+        field = f"{fam}_labels"
+        for rec in records:
+            for lbl in rec.get(field, []):
+                k = idx.get(lbl)
+                if k is not None:
+                    counts[k] += 1.0
+        priors[fam] = torch.tensor(counts / n, dtype=torch.float32)
+    return priors
+
+
 def _compute_task_losses(
     out: dict[str, torch.Tensor],
     batch: dict[str, torch.Tensor],
@@ -255,6 +282,21 @@ def main(argv: Optional[list[str]] = None) -> int:
     logger.info("loaders: train=%d val=%d test=%d batches",
                 len(train_loader), len(val_loader), len(test_loader))
 
+    families = list(cfg["experiment"]["families"])
+    vocab = json.loads(Path(
+        cfg["experiment"].get("label_vocab", "configs/label_vocab.json")
+    ).read_text())
+    priors = _compute_class_priors(train_loader.dataset.records, vocab, families)
+    model.set_class_priors({fam: p.to(device) for fam, p in priors.items()})
+    for fam in families:
+        rates = priors[fam].numpy()
+        logger.info(
+            "prior %s | min=%.3f max=%.3f mean=%.3f (init bias range %.2f..%.2f)",
+            fam, rates.min(), rates.max(), rates.mean(),
+            float(np.log(max(1e-3, rates.min()) / (1 - max(1e-3, rates.min())))),
+            float(np.log(min(1 - 1e-3, rates.max()) / (1 - min(1 - 1e-3, rates.max())))),
+        )
+
     asl = AsymmetricLoss(**cfg["loss"].get("asl", {})).to(device)
     init_log_sigma = float(cfg["loss"].get("init_log_sigma", 0.0))
     uwl = UncertaintyWeightedLoss(init_log_sigma=init_log_sigma).to(device)
@@ -279,7 +321,6 @@ def main(argv: Optional[list[str]] = None) -> int:
             warmup_steps=int(cfg["train"].get("ema_warmup_steps", 1000)),
         )
 
-    families = list(cfg["experiment"]["families"])
     n_classes = _resolve_n_classes(cfg, families)
     patience = int(cfg["train"].get("early_stop_patience", 10))
 
