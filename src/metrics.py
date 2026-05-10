@@ -82,9 +82,8 @@ def tune_thresholds_per_class(
     """Pick the per-class decision threshold that maximises F1 on the given set.
 
     For each class ``c`` independently, sweep ``t`` over ``steps`` and pick
-    ``argmax_t F1_c(t)``. Per PROJECT_PLAN.md §7.2, this is run on the
-    validation set; the returned thresholds are then frozen and applied
-    to test.
+    ``argmax_t F1_c(t)``. Run on the validation set; the returned thresholds
+    are then frozen and applied to test.
 
     Args:
         probs: ``[N, C]`` sigmoid probabilities.

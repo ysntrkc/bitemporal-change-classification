@@ -309,9 +309,10 @@ def _compute_sampler_weights(
 ) -> torch.Tensor:
     """Per-sample weights for ``WeightedRandomSampler``.
 
-    Uses ``w_i = 1 / sqrt(1 + n_positives_i)`` per PROJECT_PLAN.md §4.3.
-    In Phase 1, ``n_positives`` counts positive labels in the target
-    family only; in Phase 2, it sums positives across all three families.
+    Uses ``w_i = 1 / sqrt(1 + n_positives_i)`` to up-sample the rare
+    multi-label tail without over-weighting the heaviest pairs. In
+    Phase 1, ``n_positives`` counts positives in the target family
+    only; in Phase 2, it sums positives across all three families.
     """
     if phase == 1 and family is None:
         raise ValueError("phase 1 requires cfg['experiment']['family']")
@@ -358,7 +359,7 @@ def build_dataloaders(
 
     Args:
         cfg: Nested dict with ``data``, ``train``, and ``experiment`` keys
-            (see PROJECT_PLAN.md §10 for the schema).
+            (see ``configs/phase1_*.yaml`` for the schema).
         transform_train: Optional ``(PIL, PIL) -> (Tensor, Tensor)`` callable
             applied to the train split.
         transform_eval: Optional eval-time transform applied to val and test.

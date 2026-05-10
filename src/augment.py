@@ -2,7 +2,7 @@
 
 Provides ``PairAug`` (per-sample spatial + photometric) and
 ``cutmix_pair`` (batch-level pair-wise CutMix). Used for the train
-split only. See PROJECT_PLAN.md §6.
+split only.
 """
 
 from __future__ import annotations
@@ -30,8 +30,9 @@ class PairAug:
     contrast / saturation) is sampled independently per phase. Outputs
     are resized, converted to tensors, and normalized.
 
-    Construct with ``PairAug.from_cfg(cfg, mean, std)`` to respect the
-    schema in PROJECT_PLAN.md §10.1.
+    Construct with ``PairAug.from_cfg(cfg, mean, std)`` to read settings
+    from the experiment YAML's ``augment.spatial`` / ``augment.photometric``
+    blocks.
     """
 
     def __init__(
@@ -71,7 +72,7 @@ class PairAug:
     def from_cfg(
         cls, cfg: dict, mean: Sequence[float], std: Sequence[float]
     ) -> "PairAug":
-        """Build from a config dict per PROJECT_PLAN.md §10.1."""
+        """Build from an experiment config dict (``augment.*`` and ``data.*`` blocks)."""
         aug = cfg.get("augment", {})
         spatial = aug.get("spatial", {})
         photo = aug.get("photometric", {})

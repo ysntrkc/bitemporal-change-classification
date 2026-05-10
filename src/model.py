@@ -92,6 +92,9 @@ class BITFusion(nn.Module):
     Returns ``(fa', fb', refined_tokens)`` where ``refined_tokens ∈
     [B, 2L, dim]`` (first L are A-tokens, last L are B-tokens) — useful
     as decoder memory for ``Query2LabelHead``.
+
+    Defaults: ``L=4`` tokens per phase, 2 encoder layers, ``nhead=8``,
+    ``d_ff=2·dim``, dropout 0.1, GELU activation.
     """
 
     def __init__(
@@ -167,7 +170,7 @@ class Query2LabelHead(nn.Module):
     three times in Phase 2 (12 / 12 / 24 queries for object / event /
     attribute) on a shared memory.
 
-    Per PROJECT_PLAN §5.1: one decoder layer, pre-LN, GELU, d_ff = 2·dim.
+    Defaults: 1 decoder layer, pre-LN, GELU, ``d_ff = 2·dim``, dropout 0.1.
     """
 
     def __init__(
