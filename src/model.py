@@ -1,7 +1,8 @@
 """Model components: Siamese encoder, fusion, classification heads.
 
-Currently contains ``SiameseEncoder``. ``Phase1Model``, ``BITFusion``,
-``Query2LabelHead``, and ``Phase2Model`` are added in tasks 1.11 and 3.1–3.3.
+Phase 1: ``SiameseEncoder`` → 4-way fusion → ``Phase1Model``.
+Phase 2: adds ``BITFusion`` (token transformer + cross-attend),
+``Query2LabelHead`` (transformer-decoder classifier), and ``Phase2Model``.
 """
 
 from __future__ import annotations
@@ -75,6 +76,87 @@ class SiameseEncoder(nn.Module):
 def _enhanced_4way_fusion(fa_vec: Tensor, fb_vec: Tensor) -> Tensor:
     """Return ``concat(fA, fB, |fA - fB|, fA ⊙ fB)`` along the last dim."""
     return torch.cat([fa_vec, fb_vec, (fa_vec - fb_vec).abs(), fa_vec * fb_vec], dim=-1)
+
+
+class BITFusion(nn.Module):
+    """Bitemporal token transformer + cross-attended spatial refinement.
+
+    Each phase's spatial map ``f ∈ [B, dim, H, W]`` is summarised into
+    ``L`` learnable tokens via a shared 1×1-conv attention (softmax over
+    HW). The concatenated ``[tA ; tB] ∈ [B, 2L, dim]`` (with a learnable
+    positional + temporal embedding) is jointly refined by a small pre-LN
+    transformer encoder. Each phase's spatial features then cross-attend
+    to *its* refined tokens, yielding spatially-aware refined feature
+    maps with the original ``[B, dim, H, W]`` shape.
+
+    Returns ``(fa', fb', refined_tokens)`` where ``refined_tokens ∈
+    [B, 2L, dim]`` (first L are A-tokens, last L are B-tokens) — useful
+    as decoder memory for ``Query2LabelHead``.
+    """
+
+    def __init__(
+        self,
+        dim: int = 768,
+        L: int = 4,
+        nhead: int = 8,
+        depth: int = 2,
+        dim_ff: int | None = None,
+        dropout: float = 0.1,
+    ):
+        super().__init__()
+        self.dim = dim
+        self.L = L
+        if dim_ff is None:
+            dim_ff = 2 * dim
+
+        # Shared per-phase tokenizer: 1×1 conv → L attention maps over HW.
+        self.tokenizer = nn.Conv2d(dim, L, kernel_size=1)
+
+        # Learnable position + temporal embedding for [tA ; tB].
+        self.pos_emb = nn.Parameter(torch.zeros(2 * L, dim))
+        nn.init.trunc_normal_(self.pos_emb, std=0.02)
+
+        encoder_layer = nn.TransformerEncoderLayer(
+            d_model=dim,
+            nhead=nhead,
+            dim_feedforward=dim_ff,
+            dropout=dropout,
+            activation="gelu",
+            batch_first=True,
+            norm_first=True,
+        )
+        self.encoder = nn.TransformerEncoder(encoder_layer, num_layers=depth)
+
+        # Shared cross-attention from spatial-feature queries to refined tokens.
+        self.cross_attn = nn.MultiheadAttention(
+            embed_dim=dim, num_heads=nhead, dropout=dropout, batch_first=True,
+        )
+        self.norm_q = nn.LayerNorm(dim)
+        self.norm_kv = nn.LayerNorm(dim)
+
+    def _tokenize(self, f: Tensor) -> Tensor:
+        """``f: [B, dim, H, W]`` → tokens ``[B, L, dim]`` via spatial-softmax weighted sum."""
+        attn = self.tokenizer(f).flatten(2)        # [B, L, HW]
+        attn = attn.softmax(dim=-1)
+        flat = f.flatten(2)                        # [B, dim, HW]
+        return torch.einsum("blp,bcp->blc", attn, flat)
+
+    def _cross_refine(self, f: Tensor, tokens: Tensor) -> Tensor:
+        """Cross-attend spatial features to their refined tokens; residual add."""
+        b, d, h, w = f.shape
+        flat = f.flatten(2).transpose(1, 2)        # [B, HW, dim]
+        q = self.norm_q(flat)
+        kv = self.norm_kv(tokens)
+        out, _ = self.cross_attn(q, kv, kv, need_weights=False)
+        return (flat + out).transpose(1, 2).reshape(b, d, h, w)
+
+    def forward(self, fa: Tensor, fb: Tensor) -> tuple[Tensor, Tensor, Tensor]:
+        ta = self._tokenize(fa)                    # [B, L, dim]
+        tb = self._tokenize(fb)                    # [B, L, dim]
+        tokens = torch.cat([ta, tb], dim=1) + self.pos_emb   # broadcast on batch
+        refined = self.encoder(tokens)             # [B, 2L, dim]
+        ta_r, tb_r = refined[:, : self.L], refined[:, self.L :]
+        return self._cross_refine(fa, ta_r), self._cross_refine(fb, tb_r), refined
 
 
 class Phase1Model(nn.Module):
