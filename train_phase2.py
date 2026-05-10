@@ -244,6 +244,10 @@ def main(argv: Optional[list[str]] = None) -> int:
     parser.add_argument("--config", required=True, help="YAML config path")
     parser.add_argument("--seed", type=int, default=None, help="override experiment.seed")
     parser.add_argument("--epochs", type=int, default=None, help="override train.epochs")
+    parser.add_argument("--schedule-epochs", type=int, default=None,
+                        help="size the LR schedule for this many epochs even if "
+                        "--epochs is shorter (lets sanity runs use the full-run "
+                        "LR regime instead of a compressed cosine).")
     parser.add_argument("--output", type=str, default=None, help="override experiment.output_dir")
     args = parser.parse_args(argv)
 
@@ -309,8 +313,16 @@ def main(argv: Optional[list[str]] = None) -> int:
 
     grad_accum = max(1, int(cfg["train"].get("grad_accum", 1)))
     steps_per_epoch = max(1, len(train_loader) // grad_accum)
-    total_steps = steps_per_epoch * int(cfg["train"]["epochs"])
-    scheduler = build_scheduler(optimizer, cfg, total_steps=total_steps)
+    schedule_epochs = args.schedule_epochs or int(cfg["train"]["epochs"])
+    if schedule_epochs != int(cfg["train"]["epochs"]):
+        logger.info("LR schedule sized for %d epochs (running %d)",
+                    schedule_epochs, int(cfg["train"]["epochs"]))
+    total_steps = steps_per_epoch * schedule_epochs
+    # ``build_scheduler`` reads warmup_epochs from cfg as a *fraction of epochs*
+    # for warmup-step calculation; pass schedule_epochs there too.
+    sched_cfg = dict(cfg)
+    sched_cfg["train"] = dict(cfg["train"], epochs=schedule_epochs)
+    scheduler = build_scheduler(optimizer, sched_cfg, total_steps=total_steps)
 
     ema: Optional[ModelEma] = None
     ema_decay = float(cfg["train"].get("ema_decay", 0.0))

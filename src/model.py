@@ -201,7 +201,12 @@ class Query2LabelHead(nn.Module):
         # (initializable to a class-prior logit via ``set_class_prior``) so we
         # don't start every class at sigmoid(0)=0.5 — that biases multi-label
         # ASL training toward "predict zero" before queries can differentiate.
+        # Zero-init the projection weights so the initial logit is exactly
+        # ``class_bias`` (no random O(1) signal swamping the prior); the
+        # symmetry breaks on the first gradient step because each query's
+        # decoder output differs.
         self.proj = nn.Linear(dim, 1, bias=False)
+        nn.init.zeros_(self.proj.weight)
         self.class_bias = nn.Parameter(torch.zeros(n_classes))
 
     def forward(self, memory: Tensor) -> Tensor:
