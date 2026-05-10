@@ -1,0 +1,11 @@
+{
+  "include": ["src", "scripts", "train.py", "eval.py"],
+  "venvPath": "/home/ysn/miniconda3/envs",
+  "venv": "blm5135",
+  "pythonVersion": "3.11",
+  "reportPrivateImportUsage": "none",
+  "reportArgumentType": "none",
+  "reportAssignmentType": "none",
+  "reportAttributeAccessIssue": "none",
+  "reportCallIssue": "none"
+}

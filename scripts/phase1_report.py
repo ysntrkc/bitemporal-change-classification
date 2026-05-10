@@ -42,17 +42,17 @@ def build_table() -> None:
         "mAP": "mAP",
     }
 
-    rows: list[dict] = []
+    rows: list[dict[str, str | tuple[float, float]]] = []
     for fam in FAMILIES:
         runs = [_load_metrics(fam, s) for s in SEEDS]
-        row = {"family": fam}
+        row: dict[str, str | tuple[float, float]] = {"family": fam}
         for k in metric_keys:
             vals = np.array([r[k] for r in runs])
             row[k] = (float(vals.mean()), float(vals.std(ddof=1)))
         rows.append(row)
 
     # Phase-1 macro mean across families
-    overall = {"family": "**mean**"}
+    overall: dict[str, str | tuple[float, float]] = {"family": "**mean**"}
     for k in metric_keys:
         means = np.array([r[k][0] for r in rows])
         overall[k] = (float(means.mean()), float(means.std(ddof=1)))

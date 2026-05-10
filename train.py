@@ -225,6 +225,8 @@ def main(argv: Optional[list[str]] = None) -> int:
     best_epoch = -1
     epochs_no_improve = 0
     global_step = 0
+    epoch = 0
+    val_metrics: dict[str, float] | None = None
 
     log_path = output_dir / "train_log.csv"
     with log_path.open("w", newline="", encoding="utf-8") as lf:
@@ -282,9 +284,10 @@ def main(argv: Optional[list[str]] = None) -> int:
                     logger.info("early stopping: no improvement for %d epochs", patience)
                     break
 
-    # Final "last.pth" for resumability.
-    save_checkpoint(str(output_dir / "last.pth"), model, optimizer, scheduler, ema,
-                    epoch, val_metrics)
+    # Final "last.pth" for resumability (skipped if epochs=0).
+    if val_metrics is not None:
+        save_checkpoint(str(output_dir / "last.pth"), model, optimizer, scheduler, ema,
+                        epoch, val_metrics)
     writer.close()
     logger.info("done. best val macro_f1=%.4f at epoch %d", best_macro_f1, best_epoch)
     return 0

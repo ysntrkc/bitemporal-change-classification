@@ -200,6 +200,7 @@ def tta_forward(
         probs_family_sum = pf if probs_family_sum is None else probs_family_sum + pf
         prob_nochg_sum = pn if prob_nochg_sum is None else prob_nochg_sum + pn
 
+    assert probs_family_sum is not None and prob_nochg_sum is not None
     n = float(len(tta_ops))
     return {
         "probs_family": probs_family_sum / n,

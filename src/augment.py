@@ -93,8 +93,8 @@ class PairAug:
         )
 
     def __call__(self, a: Image.Image, b: Image.Image) -> tuple[Tensor, Tensor]:
-        a = a.resize((self.img_size, self.img_size), Image.BILINEAR)
-        b = b.resize((self.img_size, self.img_size), Image.BILINEAR)
+        a = a.resize((self.img_size, self.img_size), Image.Resampling.BILINEAR)
+        b = b.resize((self.img_size, self.img_size), Image.Resampling.BILINEAR)
 
         if random.random() < self.p_hflip:
             a, b = TF.hflip(a), TF.hflip(b)
@@ -139,8 +139,8 @@ class EvalTransform:
         self.normalize = transforms.Normalize(mean=list(mean), std=list(std))
 
     def __call__(self, a: Image.Image, b: Image.Image) -> tuple[Tensor, Tensor]:
-        a = a.resize((self.img_size, self.img_size), Image.BILINEAR)
-        b = b.resize((self.img_size, self.img_size), Image.BILINEAR)
+        a = a.resize((self.img_size, self.img_size), Image.Resampling.BILINEAR)
+        b = b.resize((self.img_size, self.img_size), Image.Resampling.BILINEAR)
         return self.normalize(TF.to_tensor(a)), self.normalize(TF.to_tensor(b))
 
 

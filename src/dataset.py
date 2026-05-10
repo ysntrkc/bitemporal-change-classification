@@ -280,8 +280,8 @@ class BitempDataset(Dataset):
         if self.transform is not None:
             a_tensor, b_tensor = self.transform(a_pil, b_pil)
         else:
-            a_pil = a_pil.resize((self.img_size, self.img_size), Image.BILINEAR)
-            b_pil = b_pil.resize((self.img_size, self.img_size), Image.BILINEAR)
+            a_pil = a_pil.resize((self.img_size, self.img_size), Image.Resampling.BILINEAR)
+            b_pil = b_pil.resize((self.img_size, self.img_size), Image.Resampling.BILINEAR)
             a_tensor = TF.to_tensor(a_pil)
             b_tensor = TF.to_tensor(b_pil)
 
@@ -335,7 +335,9 @@ def _compute_sampler_weights(
 
 def _worker_init_fn(worker_id: int) -> None:
     """Deterministic per-worker seeding."""
-    seed = torch.utils.data.get_worker_info().seed % (2**32)
+    info = torch.utils.data.get_worker_info()
+    assert info is not None, "_worker_init_fn must run inside a DataLoader worker"
+    seed = info.seed % (2**32)
     random.seed(seed + worker_id)
     np.random.seed((seed + worker_id) % (2**32))
 
