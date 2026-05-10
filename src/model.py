@@ -259,3 +259,116 @@ class Phase1Model(nn.Module):
             "logits_family": self.head_family(feat),
             "logit_nochg": self.head_nochg(feat).squeeze(-1),
         }
+
+
+class Phase2Model(nn.Module):
+    """Phase 2 unified multi-task model.
+
+    Same Siamese encoder as Phase 1, but the GAP-based fusion is
+    replaced by a BITFusion (token transformer + cross-attended
+    refinement), and the single linear head is replaced by three
+    Query2Label decoder heads (one per family, sharing memory). A
+    no-change head is also driven from the pooled fused feature.
+
+    Forward returns ``{"logits_obj", "logits_evt", "logits_attr",
+    "logit_nochg"}`` so the multi-task uncertainty-weighted loss
+    (and inference-time no-change gating) can compute per-family.
+
+    Expected cfg keys:
+        ``experiment.families``: list[str], subset of {object, event, attribute}.
+        ``experiment.label_vocab``: optional path to label_vocab.json
+            (defaults to ``configs/label_vocab.json``); used to resolve
+            per-family class counts.
+        ``model.backbone``, ``model.pretrained``, ``model.droppath``: encoder.
+        ``model.fusion.L``, ``model.fusion.depth``, ``model.fusion.nhead``,
+            ``model.fusion.dropout``: BITFusion knobs.
+        ``model.heads.dim``, ``model.heads.nhead``, ``model.heads.dropout``:
+            Query2Label knobs (decoder dim, heads, dropout).
+        ``model.fusion_dim``: FusionMLP output width (also Q2L dim).
+        ``model.dropout``: FusionMLP dropout.
+    """
+
+    _FAMILY_KEY = {"object": "logits_obj", "event": "logits_evt", "attribute": "logits_attr"}
+
+    def __init__(self, cfg: dict):
+        super().__init__()
+        import json as _json
+        from pathlib import Path as _Path
+
+        exp_cfg = cfg["experiment"]
+        model_cfg = cfg.get("model", {})
+        fusion_cfg = model_cfg.get("fusion", {})
+        heads_cfg = model_cfg.get("heads", {})
+
+        families = list(exp_cfg.get("families", ["object", "event", "attribute"]))
+        vocab_path = exp_cfg.get("label_vocab", "configs/label_vocab.json")
+        vocab = _json.loads(_Path(vocab_path).read_text())
+        n_classes = {fam: len(vocab[fam]) for fam in families}
+
+        self.encoder = SiameseEncoder(
+            name=model_cfg.get("backbone", "convnextv2_tiny.fcmae_ft_in22k_in1k"),
+            pretrained=model_cfg.get("pretrained", True),
+            drop_path_rate=model_cfg.get("droppath", 0.1),
+        )
+        backbone_dim = self.encoder.dim                 # 768 for ConvNeXt-V2-Tiny
+        fusion_dim = int(model_cfg.get("fusion_dim", 512))
+        fusion_dropout = float(model_cfg.get("dropout", 0.3))
+        head_dim = int(heads_cfg.get("dim", fusion_dim))
+        head_nhead = int(heads_cfg.get("nhead", 8))
+        head_dropout = float(heads_cfg.get("dropout", 0.1))
+
+        self.bit_fusion = BITFusion(
+            dim=backbone_dim,
+            L=int(fusion_cfg.get("L", 4)),
+            nhead=int(fusion_cfg.get("nhead", 8)),
+            depth=int(fusion_cfg.get("depth", 2)),
+            dim_ff=fusion_cfg.get("dim_ff"),  # None -> default 2*dim in BITFusion
+            dropout=float(fusion_cfg.get("dropout", 0.1)),
+        )
+
+        self.fusion_mlp = nn.Sequential(
+            nn.Linear(4 * backbone_dim, fusion_dim),
+            nn.LayerNorm(fusion_dim),
+            nn.GELU(),
+            nn.Dropout(fusion_dropout),
+        )
+
+        # Project refined BIT tokens (backbone_dim) to head_dim so they can
+        # share decoder memory with the projected pooled feature F.
+        self.token_proj = nn.Linear(backbone_dim, head_dim)
+        # If fusion_dim != head_dim, also project F into head_dim.
+        self.feat_proj = (
+            nn.Identity() if fusion_dim == head_dim else nn.Linear(fusion_dim, head_dim)
+        )
+
+        self.heads = nn.ModuleDict({
+            fam: Query2LabelHead(
+                n_classes=n_classes[fam],
+                dim=head_dim,
+                nhead=head_nhead,
+                dropout=head_dropout,
+            )
+            for fam in families
+        })
+        self.head_nochg = nn.Linear(fusion_dim, 1)
+        self.families = families
+
+    def forward(self, a: Tensor, b: Tensor) -> dict[str, Tensor]:
+        fa, fb = self.encoder(a, b)
+        fa_ref, fb_ref, refined_tokens = self.bit_fusion(fa, fb)
+
+        fa_vec = fa_ref.mean(dim=(2, 3))
+        fb_vec = fb_ref.mean(dim=(2, 3))
+        v = _enhanced_4way_fusion(fa_vec, fb_vec)
+        feat = self.fusion_mlp(v)                                   # [B, fusion_dim]
+
+        feat_q = self.feat_proj(feat).unsqueeze(1)                  # [B, 1, head_dim]
+        tokens_q = self.token_proj(refined_tokens)                  # [B, 2L, head_dim]
+        memory = torch.cat([feat_q, tokens_q], dim=1)               # [B, 1+2L, head_dim]
+
+        out: dict[str, Tensor] = {
+            self._FAMILY_KEY[fam]: self.heads[fam](memory)
+            for fam in self.families
+        }
+        out["logit_nochg"] = self.head_nochg(feat).squeeze(-1)
+        return out
