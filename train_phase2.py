@@ -195,7 +195,7 @@ def evaluate(
 
     fam_probs: dict[str, list[np.ndarray]] = {fam: [] for fam in families}
     fam_targets: dict[str, list[np.ndarray]] = {fam: [] for fam in families}
-    nc_probs_list: list[np.ndarray] = []
+    change_probs_list: list[np.ndarray] = []
     total_loss = 0.0
     n_batches = 0
 
@@ -211,22 +211,26 @@ def evaluate(
         total_loss += loss.item()
         n_batches += 1
 
-        # Collect raw per-family probs and the no-change prob (for optional gating).
-        p_nc = torch.sigmoid(out["logit_nochg"].float()).cpu().numpy()
-        nc_probs_list.append(p_nc)
+        # Collect raw per-family probs and the change prob (for optional gating).
+        # logit_nochg is trained to predict is_change=1, so sigmoid(.) is P(change).
+        p_change = torch.sigmoid(out["logit_nochg"].float()).cpu().numpy()
+        change_probs_list.append(p_change)
         for fam in families:
             p = torch.sigmoid(out[FAMILY_LOGITS_KEY[fam]].float()).cpu().numpy()
             fam_probs[fam].append(p)
             fam_targets[fam].append(batch[FAMILY_Y_KEY[fam]].cpu().numpy())
 
-    nc_probs = np.concatenate(nc_probs_list, axis=0)             # [N]
+    change_probs = np.concatenate(change_probs_list, axis=0)     # [N], P(change)
     metrics: dict = {"loss": total_loss / max(1, n_batches)}
     macro_f1s: list[float] = []
     for fam in families:
         probs = np.concatenate(fam_probs[fam], axis=0)            # [N, C]
         targets = np.concatenate(fam_targets[fam], axis=0)
         if nochg_gate:
-            probs = probs * (1.0 - nc_probs[:, None])
+            # Suppress family probs when the model is confident there's no change:
+            # p_family <- p_family * P(change). High P(change) -> pass through;
+            # low P(change) -> suppress to ~0 so we don't predict any class.
+            probs = probs * change_probs[:, None]
         m = compute_metrics(probs, targets, thresholds=np.full(n_classes[fam], 0.5))
         metrics[fam] = m
         macro_f1s.append(m["macro_f1"])

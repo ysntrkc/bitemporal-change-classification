@@ -84,7 +84,7 @@ sampler:
   weight_formula: "1/sqrt(1+n_pos_total)"   # sums positives across all 3 families
 
 inference:
-  nochg_gate: true       # multiply each family's prob by (1 - p_nc)
+  nochg_gate: true       # multiply each family's prob by P(change) = sigmoid(logit_nochg)
 
 eval:
   threshold_sweep: [0.05, 0.95, 0.02]
