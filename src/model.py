@@ -342,14 +342,34 @@ class Phase2Model(nn.Module):
         head_nhead = int(heads_cfg.get("nhead", 8))
         head_dropout = float(heads_cfg.get("dropout", 0.1))
 
-        self.bit_fusion = BITFusion(
-            dim=backbone_dim,
-            L=int(fusion_cfg.get("L", 4)),
-            nhead=int(fusion_cfg.get("nhead", 8)),
-            depth=int(fusion_cfg.get("depth", 2)),
-            dim_ff=fusion_cfg.get("dim_ff"),  # None -> default 2*dim in BITFusion
-            dropout=float(fusion_cfg.get("dropout", 0.1)),
-        )
+        head_type = heads_cfg.get("type", "query2label")
+        if head_type not in ("query2label", "linear"):
+            raise ValueError(f"unknown model.heads.type {head_type!r}")
+        self.head_type = head_type
+
+        fusion_type = fusion_cfg.get("type", "bit")
+        if fusion_type not in ("bit", "passthrough"):
+            raise ValueError(f"unknown model.fusion.type {fusion_type!r}")
+        self.fusion_type = fusion_type
+        if fusion_type == "bit":
+            self.bit_fusion = BITFusion(
+                dim=backbone_dim,
+                L=int(fusion_cfg.get("L", 4)),
+                nhead=int(fusion_cfg.get("nhead", 8)),
+                depth=int(fusion_cfg.get("depth", 2)),
+                dim_ff=fusion_cfg.get("dim_ff"),  # None -> default 2*dim in BITFusion
+                dropout=float(fusion_cfg.get("dropout", 0.1)),
+            )
+        else:
+            # passthrough: skip BIT and use the raw encoder outputs. Only
+            # compatible with linear heads (no refined tokens for Q2L memory).
+            if head_type == "query2label":
+                raise ValueError(
+                    "model.fusion.type='passthrough' is incompatible with "
+                    "model.heads.type='query2label' (no refined tokens for "
+                    "decoder memory). Use heads.type='linear'."
+                )
+            self.bit_fusion = None
 
         self.fusion_mlp = nn.Sequential(
             nn.Linear(4 * backbone_dim, fusion_dim),
@@ -357,11 +377,6 @@ class Phase2Model(nn.Module):
             nn.GELU(),
             nn.Dropout(fusion_dropout),
         )
-
-        head_type = heads_cfg.get("type", "query2label")
-        if head_type not in ("query2label", "linear"):
-            raise ValueError(f"unknown model.heads.type {head_type!r}")
-        self.head_type = head_type
 
         if head_type == "query2label":
             # Query2Label: 3 transformer-decoder heads sharing memory =
@@ -392,7 +407,11 @@ class Phase2Model(nn.Module):
 
     def forward(self, a: Tensor, b: Tensor) -> dict[str, Tensor]:
         fa, fb = self.encoder(a, b)
-        fa_ref, fb_ref, refined_tokens = self.bit_fusion(fa, fb)
+        if self.fusion_type == "bit":
+            fa_ref, fb_ref, refined_tokens = self.bit_fusion(fa, fb)
+        else:
+            fa_ref, fb_ref = fa, fb
+            refined_tokens = None  # unused: passthrough requires linear heads
 
         fa_vec = fa_ref.mean(dim=(2, 3))
         fb_vec = fb_ref.mean(dim=(2, 3))
