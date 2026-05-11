@@ -93,10 +93,12 @@ def _fmt(v: tuple[float, float] | None, multi_seed: bool) -> str:
 
 
 ROWS: list[RowSpec] = [
-    # Weak baseline (Object only, single seed) — anchors "why ConvNeXt-V2 + ASL?"
-    RowSpec("A0: ResNet-50 + BCE (object only)",
-            "phase1_object_resnet50_bce/seed{seed}/metrics_test_tta.json",
-            (42,), note="single seed, object only", families=("object",)),
+    # Weak baseline (3 families × 3 seeds) — anchors "why ConvNeXt-V2 + ASL?"
+    RowSpec("A0: ResNet-50 + BCE",
+            "phase1_{family}_resnet50_bce/seed{seed}/metrics_test_tta.json", SEEDS),
+    # Backbone-swap: same recipe, ResNet-50 backbone (isolates the backbone choice)
+    RowSpec("A1: ResNet-50 + ASL  (backbone swap)",
+            "phase1_{family}_resnet50/seed{seed}/metrics_test_tta.json", SEEDS),
     # Phase-1 ablations (4 flavors × 3 seeds × 3 families)
     RowSpec("P1: default 0.5, no TTA",
             "phase1_{family}/seed{seed}/metrics_test.json", SEEDS),
@@ -113,6 +115,8 @@ ROWS: list[RowSpec] = [
             note="single seed"),
     RowSpec("P2: BIT, linear heads, fixed weights  (canonical)",
             "phase2_bit_only/seed{seed}/metrics_test_tta_gate.json", SEEDS),
+    RowSpec("P2: BIT, ResNet-50 backbone  (backbone swap)",
+            "phase2_bit_only_resnet50/seed{seed}/metrics_test_tta_gate.json", SEEDS),
     RowSpec("P2: BIT, Q2L heads, UWL  (full stack)",
             "phase2_unified/seed{seed}/metrics_test_tta_gate.json", (42,),
             note="single seed"),
