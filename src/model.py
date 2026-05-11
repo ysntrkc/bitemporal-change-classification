@@ -358,23 +358,35 @@ class Phase2Model(nn.Module):
             nn.Dropout(fusion_dropout),
         )
 
-        # Project refined BIT tokens (backbone_dim) to head_dim so they can
-        # share decoder memory with the projected pooled feature F.
-        self.token_proj = nn.Linear(backbone_dim, head_dim)
-        # If fusion_dim != head_dim, also project F into head_dim.
-        self.feat_proj = (
-            nn.Identity() if fusion_dim == head_dim else nn.Linear(fusion_dim, head_dim)
-        )
+        head_type = heads_cfg.get("type", "query2label")
+        if head_type not in ("query2label", "linear"):
+            raise ValueError(f"unknown model.heads.type {head_type!r}")
+        self.head_type = head_type
 
-        self.heads = nn.ModuleDict({
-            fam: Query2LabelHead(
-                n_classes=n_classes[fam],
-                dim=head_dim,
-                nhead=head_nhead,
-                dropout=head_dropout,
+        if head_type == "query2label":
+            # Query2Label: 3 transformer-decoder heads sharing memory =
+            # concat(F, refined_tokens). Project tokens (backbone_dim) and F
+            # (fusion_dim) into head_dim first.
+            self.token_proj = nn.Linear(backbone_dim, head_dim)
+            self.feat_proj = (
+                nn.Identity() if fusion_dim == head_dim
+                else nn.Linear(fusion_dim, head_dim)
             )
-            for fam in families
-        })
+            self.heads = nn.ModuleDict({
+                fam: Query2LabelHead(
+                    n_classes=n_classes[fam],
+                    dim=head_dim,
+                    nhead=head_nhead,
+                    dropout=head_dropout,
+                )
+                for fam in families
+            })
+        else:  # linear: Phase-1-style classifier on the pooled fused feature.
+            self.heads = nn.ModuleDict({
+                fam: nn.Linear(fusion_dim, n_classes[fam])
+                for fam in families
+            })
+
         self.head_nochg = nn.Linear(fusion_dim, 1)
         self.families = families
 
@@ -387,19 +399,24 @@ class Phase2Model(nn.Module):
         v = _enhanced_4way_fusion(fa_vec, fb_vec)
         feat = self.fusion_mlp(v)                                   # [B, fusion_dim]
 
-        feat_q = self.feat_proj(feat).unsqueeze(1)                  # [B, 1, head_dim]
-        tokens_q = self.token_proj(refined_tokens)                  # [B, 2L, head_dim]
-        memory = torch.cat([feat_q, tokens_q], dim=1)               # [B, 1+2L, head_dim]
-
-        out: dict[str, Tensor] = {
-            self._FAMILY_KEY[fam]: self.heads[fam](memory)
-            for fam in self.families
-        }
+        if self.head_type == "query2label":
+            feat_q = self.feat_proj(feat).unsqueeze(1)              # [B, 1, head_dim]
+            tokens_q = self.token_proj(refined_tokens)              # [B, 2L, head_dim]
+            memory = torch.cat([feat_q, tokens_q], dim=1)           # [B, 1+2L, head_dim]
+            out: dict[str, Tensor] = {
+                self._FAMILY_KEY[fam]: self.heads[fam](memory)
+                for fam in self.families
+            }
+        else:  # linear
+            out = {
+                self._FAMILY_KEY[fam]: self.heads[fam](feat)
+                for fam in self.families
+            }
         out["logit_nochg"] = self.head_nochg(feat).squeeze(-1)
         return out
 
     def set_class_priors(self, priors: dict[str, Tensor]) -> None:
-        """Initialize each Q2L head's per-class bias to the empirical prior.
+        """Initialize each family head's per-class bias to the empirical prior.
 
         ``priors[fam]`` is a ``[n_classes_fam]`` tensor of positive rates on
         the training split. Heads not in ``priors`` are left at zero.
@@ -407,4 +424,10 @@ class Phase2Model(nn.Module):
         for fam, p in priors.items():
             if fam not in self.heads:
                 raise KeyError(f"family {fam!r} not in heads ({list(self.heads)})")
-            self.heads[fam].set_class_prior(p)
+            head = self.heads[fam]
+            if self.head_type == "query2label":
+                head.set_class_prior(p)
+            else:  # linear: set the bias directly to logit(prior)
+                eps = 1e-3
+                p_clamped = p.clamp(min=eps, max=1.0 - eps)
+                head.bias.data.copy_(torch.log(p_clamped / (1.0 - p_clamped)))

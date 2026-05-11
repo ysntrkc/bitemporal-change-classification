@@ -126,3 +126,33 @@ class UncertaintyWeightedLoss(nn.Module):
         with torch.no_grad():
             w = (0.5 * torch.exp(-self._clamped())).tolist()
         return dict(zip(self._TASKS, w))
+
+
+class FixedWeightLoss(nn.Module):
+    """Fixed per-task scalar weights, no learnable parameters.
+
+    Phase-1-style aggregation: ``L = Σᵢ wᵢ · Lᵢ`` where weights are
+    config-driven. Used as the no-UWL fallback in Phase 2 (mirrors
+    the Phase-1 default of ``1·ASL_family + 0.2·BCE_nochg`` when
+    instantiated with ``weights={'obj': 1, 'evt': 1, 'attr': 1,
+    'nochg': 0.2}``). Has the same forward/task_weights interface as
+    ``UncertaintyWeightedLoss`` so callers can swap implementations.
+    """
+
+    _TASKS = ("obj", "evt", "attr", "nochg")
+
+    def __init__(self, weights: dict[str, float]):
+        super().__init__()
+        missing = [t for t in self._TASKS if t not in weights]
+        if missing:
+            raise KeyError(f"weights missing tasks: {missing}; got {list(weights)}")
+        self._weights = {t: float(weights[t]) for t in self._TASKS}
+
+    def forward(self, losses: dict[str, Tensor]) -> Tensor:
+        missing = [t for t in self._TASKS if t not in losses]
+        if missing:
+            raise KeyError(f"missing task losses: {missing}; got keys {list(losses)}")
+        return sum(self._weights[t] * losses[t] for t in self._TASKS)
+
+    def task_weights(self) -> dict[str, float]:
+        return dict(self._weights)

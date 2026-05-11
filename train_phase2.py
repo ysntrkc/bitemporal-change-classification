@@ -33,7 +33,7 @@ from torch.utils.tensorboard import SummaryWriter
 from src.augment import EvalTransform, PairAug, cutmix_pair
 from src.dataset import build_dataloaders
 from src.ema import ModelEma
-from src.losses import AsymmetricLoss, UncertaintyWeightedLoss
+from src.losses import AsymmetricLoss, FixedWeightLoss, UncertaintyWeightedLoss
 from src.metrics import compute_metrics
 from src.model import Phase2Model
 from src.utils import build_optimizer, build_scheduler, save_checkpoint, seed_everything
@@ -306,14 +306,24 @@ def main(argv: Optional[list[str]] = None) -> int:
         )
 
     asl = AsymmetricLoss(**cfg["loss"].get("asl", {})).to(device)
-    init_log_sigma = float(cfg["loss"].get("init_log_sigma", 0.0))
-    uwl = UncertaintyWeightedLoss(init_log_sigma=init_log_sigma).to(device)
+    loss_type = cfg["loss"].get("type", "uncertainty_weighted")
+    if loss_type == "uncertainty_weighted":
+        init_log_sigma = float(cfg["loss"].get("init_log_sigma", 0.0))
+        uwl: torch.nn.Module = UncertaintyWeightedLoss(init_log_sigma=init_log_sigma).to(device)
+    elif loss_type == "fixed":
+        weights = cfg["loss"].get("weights", {"obj": 1.0, "evt": 1.0, "attr": 1.0, "nochg": 0.2})
+        uwl = FixedWeightLoss(weights=weights).to(device)
+        logger.info("fixed-weight loss: %s", {k: f"{v:.3f}" for k, v in weights.items()})
+    else:
+        raise ValueError(f"unknown loss.type {loss_type!r}")
 
-    # Optimizer must include the uncertainty-weighting log-sigma parameters.
+    # Optimizer must include any learnable weighting parameters (UWL only).
     optimizer = build_optimizer(model, cfg)
     head_lr = float(cfg["train"]["head_lr"])
-    optimizer.add_param_group({"params": list(uwl.parameters()), "lr": head_lr,
-                               "weight_decay": 0.0})
+    uwl_params = list(uwl.parameters())
+    if uwl_params:
+        optimizer.add_param_group({"params": uwl_params, "lr": head_lr,
+                                   "weight_decay": 0.0})
 
     grad_accum = max(1, int(cfg["train"].get("grad_accum", 1)))
     steps_per_epoch = max(1, len(train_loader) // grad_accum)
@@ -351,7 +361,7 @@ def main(argv: Optional[list[str]] = None) -> int:
     csv_cols = ["epoch", "train_loss", "val_loss", "val_macro_f1_mean"]
     for fam in families:
         csv_cols += [f"val_macro_f1_{fam}", f"val_micro_f1_{fam}", f"val_map_{fam}"]
-    csv_cols += [f"log_sigma_{k}" for k in ("obj", "evt", "attr", "nochg")]
+    csv_cols += [f"task_weight_{k}" for k in ("obj", "evt", "attr", "nochg")]
     csv_cols += ["lr_head", "lr_bb_max"]
 
     with log_path.open("w", newline="", encoding="utf-8") as lf:
@@ -368,12 +378,12 @@ def main(argv: Optional[list[str]] = None) -> int:
             val_metrics = evaluate(val_model, val_loader, asl, uwl, cfg, device, n_classes)
 
             lrs = [g["lr"] for g in optimizer.param_groups]
+            tw = uwl.task_weights()                              # {"obj":..., "evt":..., "attr":..., "nochg":...}
             row: list = [epoch, train_loss, val_metrics["loss"], val_metrics["macro_f1_mean"]]
             for fam in families:
                 m = val_metrics[fam]
                 row += [m["macro_f1"], m["micro_f1"], m["mAP"]]
-            for v in uwl.log_sigma.detach().cpu().tolist():
-                row.append(v)
+            row += [tw["obj"], tw["evt"], tw["attr"], tw["nochg"]]
             row += [max(lrs), min(lrs)]
             log_writer.writerow(row)
             lf.flush()
@@ -385,9 +395,8 @@ def main(argv: Optional[list[str]] = None) -> int:
                 writer.add_scalar(f"val/macro_f1_{fam}", m["macro_f1"], epoch)
                 writer.add_scalar(f"val/micro_f1_{fam}", m["micro_f1"], epoch)
                 writer.add_scalar(f"val/mAP_{fam}", m["mAP"], epoch)
-            for i, fam_key in enumerate(("obj", "evt", "attr", "nochg")):
-                writer.add_scalar(f"train/log_sigma_{fam_key}",
-                                  uwl.log_sigma[i].item(), epoch)
+            for fam_key in ("obj", "evt", "attr", "nochg"):
+                writer.add_scalar(f"train/task_weight_{fam_key}", tw[fam_key], epoch)
 
             per_fam_f1 = " ".join(
                 f"{fam[:3]}={val_metrics[fam]['macro_f1']:.4f}" for fam in families
