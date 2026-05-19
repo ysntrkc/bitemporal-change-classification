@@ -44,7 +44,8 @@ def compute_metrics(
             ``precision_micro``, ``precision_macro``,
             ``recall_micro``, ``recall_macro``,
             ``mAP`` (macro-averaged, threshold-free),
-            ``per_class_f1`` (``list[float]`` of length ``C``).
+            ``per_class_f1``, ``per_class_precision``, ``per_class_recall``,
+            ``per_class_ap``, ``per_class_support`` (each ``list`` of length ``C``).
     """
     if probs.shape != targets.shape:
         raise ValueError(
@@ -57,6 +58,18 @@ def compute_metrics(
 
     preds = (probs >= thresholds[None, :]).astype(np.int64)
     y = targets.astype(np.int64)
+
+    # per-class AP is undefined for classes with zero positives; mark as NaN
+    # so the JSON consumer can distinguish "no support" from "scored zero".
+    support = y.sum(axis=0).astype(np.int64)
+    per_class_ap: list[float] = []
+    for k in range(y.shape[1]):
+        if support[k] == 0:
+            per_class_ap.append(float("nan"))
+        else:
+            per_class_ap.append(
+                float(average_precision_score(y[:, k], probs[:, k]))
+            )
 
     return {
         "micro_f1": float(f1_score(y, preds, average="micro", zero_division=0)),
@@ -71,6 +84,14 @@ def compute_metrics(
         "recall_macro": float(recall_score(y, preds, average="macro", zero_division=0)),
         "mAP": float(average_precision_score(y, probs, average="macro")),
         "per_class_f1": f1_score(y, preds, average=None, zero_division=0).tolist(),
+        "per_class_precision": precision_score(
+            y, preds, average=None, zero_division=0
+        ).tolist(),
+        "per_class_recall": recall_score(
+            y, preds, average=None, zero_division=0
+        ).tolist(),
+        "per_class_ap": per_class_ap,
+        "per_class_support": support.tolist(),
     }
 
 
