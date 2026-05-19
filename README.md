@@ -11,8 +11,10 @@ src/          Implementation modules (dataset, models, losses, augmentation, met
 configs/      YAML experiment configurations
 scripts/      Bash launchers for training and evaluation runs
 reports/      LaTeX sources for the final report
-train.py      Training entry point
-eval.py       Evaluation entry point
+train_phase1.py  Training entry point (Phase 1 single-task models)
+train_phase2.py  Training entry point (Phase 2 unified multi-task model)
+eval_phase1.py   Evaluation entry point (Phase 1)
+eval_phase2.py   Evaluation entry point (Phase 2)
 ```
 
 ## Setup
@@ -27,16 +29,17 @@ pip install -r requirements.txt
 ## Training
 
 ```
-python train.py --config configs/phase1_object.yaml --seed 42
-python train.py --config configs/phase1_event.yaml --seed 42
-python train.py --config configs/phase1_attribute.yaml --seed 42
-python train.py --config configs/phase2_unified.yaml --seed 42
+python train_phase1.py --config configs/phase1_object.yaml --seed 42
+python train_phase1.py --config configs/phase1_event.yaml --seed 42
+python train_phase1.py --config configs/phase1_attribute.yaml --seed 42
+python train_phase2.py --config configs/phase2_unified.yaml --seed 42
 ```
 
 ## Evaluation
 
 ```
-python eval.py --ckpt <checkpoint> --config <config>
+python eval_phase1.py --ckpt <phase1-checkpoint> --config <phase1-config>
+python eval_phase2.py --ckpt <phase2-checkpoint> --config <phase2-config>
 ```
 
 ## Dataset

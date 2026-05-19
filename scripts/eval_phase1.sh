@@ -32,15 +32,15 @@ for fam in "${FAMILIES[@]}"; do
     echo "=========================================="
 
     echo "--- 1/3 tune thresholds on val ---"
-    python eval.py --ckpt "${ckpt}" --config "${cfg}" \
+    python eval_phase1.py --ckpt "${ckpt}" --config "${cfg}" \
       --mode tune-thresholds --split val
 
     echo "--- 2/3 test metrics: TTA + tuned thresholds ---"
-    python eval.py --ckpt "${ckpt}" --config "${cfg}" \
+    python eval_phase1.py --ckpt "${ckpt}" --config "${cfg}" \
       --tta --apply-thresholds "${thr}" --split test
 
     echo "--- 3/3 test metrics: default 0.5, no TTA (baseline) ---"
-    python eval.py --ckpt "${ckpt}" --config "${cfg}" --split test
+    python eval_phase1.py --ckpt "${ckpt}" --config "${cfg}" --split test
   done
 done
 

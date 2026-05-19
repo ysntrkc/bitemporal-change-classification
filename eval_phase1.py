@@ -9,15 +9,15 @@ Two modes:
   ``test``), optionally with TTA and pre-tuned thresholds, save
   ``metrics_<split>[_tta][_thr].json``.
 
-Examples (also see CLAUDE.md §6)::
+Examples::
 
     # Tune per-class thresholds on val
-    python eval.py --ckpt results/phase1_object/seed42/best_ema.pth \\
+    python eval_phase1.py --ckpt results/phase1_object/seed42/best_ema.pth \\
                    --config configs/phase1_object.yaml \\
                    --mode tune-thresholds --split val
 
     # Final test metrics with TTA + tuned thresholds
-    python eval.py --ckpt results/phase1_object/seed42/best_ema.pth \\
+    python eval_phase1.py --ckpt results/phase1_object/seed42/best_ema.pth \\
                    --config configs/phase1_object.yaml \\
                    --tta \\
                    --apply-thresholds results/phase1_object/seed42/thresholds.json \\
@@ -57,7 +57,9 @@ def build_model(cfg: dict) -> torch.nn.Module:
     phase = cfg["experiment"]["phase"]
     if phase == 1:
         return Phase1Model(cfg)
-    raise NotImplementedError(f"phase {phase} not yet implemented in eval.py")
+    raise NotImplementedError(
+        f"phase {phase} not handled by eval_phase1.py; use eval_phase2.py"
+    )
 
 
 def collect_probs(
@@ -102,7 +104,7 @@ def main(argv: Optional[list[str]] = None) -> int:
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
         datefmt="%H:%M:%S",
     )
-    parser = argparse.ArgumentParser(prog="eval.py")
+    parser = argparse.ArgumentParser(prog="eval_phase1.py")
     parser.add_argument("--ckpt", required=True, help="checkpoint path (.pth)")
     parser.add_argument("--config", required=True, help="YAML config path")
     parser.add_argument(
@@ -127,6 +129,12 @@ def main(argv: Optional[list[str]] = None) -> int:
         help="path to thresholds.json (metrics mode only)",
     )
     parser.add_argument(
+        "--gate",
+        action="store_true",
+        help="multiplicative no-change gate: probs_family *= prob_nochg "
+             "(metrics mode only; mirrors Phase 2 gating)",
+    )
+    parser.add_argument(
         "--output",
         type=str,
         default=None,
@@ -138,6 +146,8 @@ def main(argv: Optional[list[str]] = None) -> int:
         args.split = "val" if args.mode == "tune-thresholds" else "test"
     if args.apply_thresholds and args.mode != "metrics":
         parser.error("--apply-thresholds is only valid in metrics mode")
+    if args.gate and args.mode != "metrics":
+        parser.error("--gate is only valid in metrics mode")
 
     cfg = load_config(args.config)
     seed_everything(int(cfg["experiment"]["seed"]))
@@ -174,8 +184,16 @@ def main(argv: Optional[list[str]] = None) -> int:
         family, args.split, n_classes, tta_ops,
     )
 
-    probs_fam, _probs_nc, targets = collect_probs(model, loader, fam_key, tta_ops, device)
+    probs_fam, probs_nc, targets = collect_probs(model, loader, fam_key, tta_ops, device)
     logger.info("collected probs: shape=%s", probs_fam.shape)
+
+    if args.gate:
+        # Multiplicative no-change gate, mirroring Phase 2: each family
+        # probability is downweighted by the auxiliary head's P(changed).
+        # Soft (no hard threshold) so calibration of ``head_nochg`` carries
+        # through directly to the downstream decision.
+        probs_fam = probs_fam * probs_nc[:, None]
+        logger.info("gate applied: mean P(chg)=%.3f", float(probs_nc.mean()))
 
     ckpt_dir = Path(args.ckpt).parent
 
@@ -224,6 +242,8 @@ def main(argv: Optional[list[str]] = None) -> int:
             suffix += "_tta"
         if args.apply_thresholds:
             suffix += "_thr"
+        if args.gate:
+            suffix += "_gate"
         out_path = (
             Path(args.output)
             if args.output
@@ -242,6 +262,7 @@ def main(argv: Optional[list[str]] = None) -> int:
                     "tta_ops": tta_ops,
                     "thresholds_path": args.apply_thresholds,
                     "thresholds": thr.tolist(),
+                    "nochg_gate": bool(args.gate),
                     **m,
                 },
                 f,

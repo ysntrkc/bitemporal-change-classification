@@ -1,16 +1,16 @@
 """Training entry point for Phase 1 single-task models.
 
 Usage:
-    python train.py --config configs/phase1_object.yaml --seed 42
+    python train_phase1.py --config configs/phase1_object.yaml --seed 42
 
-Phase 2 support is added in a later task; for now, only Phase 1
-(``experiment.phase == 1``) is wired up.
+Phase 2 lives in ``train_phase2.py``.
 """
 
 from __future__ import annotations
 
 import argparse
 import csv
+import json
 import logging
 import shutil
 import sys
@@ -25,9 +25,9 @@ import yaml
 from torch.utils.tensorboard import SummaryWriter
 
 from src.augment import EvalTransform, PairAug, cutmix_pair
-from src.dataset import build_dataloaders
+from src.dataset import build_dataloaders, build_label_vocab
 from src.ema import ModelEma
-from src.losses import AsymmetricLoss
+from src.losses import AsymmetricLoss, DistributionBalancedLoss
 from src.metrics import compute_metrics
 from src.model import Phase1Model
 from src.utils import build_optimizer, build_scheduler, save_checkpoint, seed_everything
@@ -46,7 +46,60 @@ def build_model(cfg: dict) -> torch.nn.Module:
     phase = cfg["experiment"]["phase"]
     if phase == 1:
         return Phase1Model(cfg)
-    raise NotImplementedError(f"phase {phase} not yet implemented in train.py")
+    raise NotImplementedError(
+        f"phase {phase} not handled by train_phase1.py; use train_phase2.py"
+    )
+
+
+def _compute_train_class_freq(cfg: dict, family: str) -> tuple[torch.Tensor, int]:
+    """Count positives per class on the training split for the chosen family.
+
+    Returns ``(class_freq, n_train)`` where ``class_freq`` is a ``[C]``
+    float tensor and ``n_train`` is the total number of training records
+    (including no-change). Used to parametrise DBLoss.
+    """
+    json_path = cfg["data"]["json_path"]
+    vocab_path = cfg["data"]["vocab_path"]
+    with Path(vocab_path).open("r", encoding="utf-8") as f:
+        vocab = json.load(f)
+    if family not in vocab:
+        raise KeyError(f"family {family!r} not in vocab {list(vocab)}")
+    class_names: list[str] = vocab[family]
+    label_to_idx = {lbl: i for i, lbl in enumerate(class_names)}
+
+    with Path(json_path).open("r", encoding="utf-8") as f:
+        blob = json.load(f)
+    train_records = [r for r in blob["images"] if r["split"] == "train"]
+
+    counts = torch.zeros(len(class_names), dtype=torch.float64)
+    for r in train_records:
+        for lbl in r.get(f"{family}_labels", []):
+            idx = label_to_idx.get(lbl)
+            if idx is not None:
+                counts[idx] += 1.0
+    return counts, len(train_records)
+
+
+def build_family_loss(cfg: dict) -> torch.nn.Module:
+    """Factory: dispatch on ``cfg.loss.family`` to build the family-head loss.
+
+    Supported values: ``"asl"`` (default), ``"dbloss"``. DBLoss needs the
+    training-split class frequencies, which are scanned lazily here so
+    plain ASL runs don't pay the I/O cost.
+    """
+    loss_cfg = cfg["loss"]
+    name = str(loss_cfg.get("family", "asl")).lower()
+    if name == "asl":
+        return AsymmetricLoss(**loss_cfg.get("asl", {}))
+    if name == "dbloss":
+        family = cfg["experiment"]["family"]
+        class_freq, n_train = _compute_train_class_freq(cfg, family)
+        return DistributionBalancedLoss(
+            class_freq=class_freq,
+            n_train=n_train,
+            **loss_cfg.get("dbloss", {}),
+        )
+    raise ValueError(f"unknown loss.family {name!r}; expected 'asl' or 'dbloss'")
 
 
 def train_one_epoch(
@@ -54,7 +107,7 @@ def train_one_epoch(
     loader,
     optimizer: torch.optim.Optimizer,
     scheduler,
-    loss_fn: AsymmetricLoss,
+    loss_fn: torch.nn.Module,
     cfg: dict,
     ema: Optional[ModelEma],
     device: torch.device,
@@ -116,7 +169,7 @@ def train_one_epoch(
 def evaluate(
     model: torch.nn.Module,
     loader,
-    loss_fn: AsymmetricLoss,
+    loss_fn: torch.nn.Module,
     cfg: dict,
     device: torch.device,
     n_classes: int,
@@ -163,7 +216,7 @@ def main(argv: Optional[list[str]] = None) -> int:
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
         datefmt="%H:%M:%S",
     )
-    parser = argparse.ArgumentParser(prog="train.py")
+    parser = argparse.ArgumentParser(prog="train_phase1.py")
     parser.add_argument("--config", required=True, help="YAML config path")
     parser.add_argument("--seed", type=int, default=None, help="override experiment.seed")
     parser.add_argument("--epochs", type=int, default=None, help="override train.epochs")
@@ -205,7 +258,7 @@ def main(argv: Optional[list[str]] = None) -> int:
         "loaders: train=%d val=%d test=%d batches", len(train_loader), len(val_loader), len(test_loader)
     )
 
-    loss_fn = AsymmetricLoss(**cfg["loss"].get("asl", {}))
+    loss_fn = build_family_loss(cfg).to(device)
     optimizer = build_optimizer(model, cfg)
     total_steps = len(train_loader) * int(cfg["train"]["epochs"])
     scheduler = build_scheduler(optimizer, cfg, total_steps=total_steps)

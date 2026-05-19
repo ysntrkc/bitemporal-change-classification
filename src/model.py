@@ -22,8 +22,7 @@ class SiameseEncoder(nn.Module):
 
     A and B are concatenated along the batch dimension and forwarded
     through a single backbone call (efficiency + identical BatchNorm
-    statistics, per CLAUDE.md §5.2). Outputs are split back into
-    ``(fA, fB)``.
+    statistics). Outputs are split back into ``(fA, fB)``.
 
     For the default ``convnextv2_tiny.fcmae_ft_in22k_in1k`` checkpoint
     at 224² input, ``fA`` and ``fB`` have shape ``[B, 768, 7, 7]``.

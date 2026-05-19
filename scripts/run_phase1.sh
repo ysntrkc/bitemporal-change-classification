@@ -23,7 +23,7 @@ for fam in "${FAMILIES[@]}"; do
     mkdir -p "${out}"
     log="${out}/run.log"
     echo "[run]  ${fam}/seed${seed} -> ${log}"
-    python train.py \
+    python train_phase1.py \
       --config "configs/phase1_${fam}.yaml" \
       --seed "${seed}" \
       --output "${out}" 2>&1 | tee "${log}"

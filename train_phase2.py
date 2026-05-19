@@ -3,7 +3,7 @@
 Usage:
     python train_phase2.py --config configs/phase2_unified.yaml --seed 42
 
-Differs from ``train.py`` (Phase 1) in four ways:
+Differs from ``train_phase1.py`` in four ways:
   1. Builds ``Phase2Model`` (BIT fusion + 3x Q2L heads + no-change head).
   2. Combines four task losses (3x ASL + 1x BCE) via
      ``UncertaintyWeightedLoss`` with 4 learnable log-sigma parameters.

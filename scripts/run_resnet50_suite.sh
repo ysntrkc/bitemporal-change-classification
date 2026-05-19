@@ -44,7 +44,7 @@ run_train_phase1() {
   echo "=========================================="
   echo "[train] ${name}/seed${seed} -> ${log}"
   echo "=========================================="
-  python train.py --config "${cfg}" --seed "${seed}" --output "${out}" 2>&1 | tee "${log}"
+  python train_phase1.py --config "${cfg}" --seed "${seed}" --output "${out}" 2>&1 | tee "${log}"
 }
 
 run_train_phase2() {
@@ -74,7 +74,7 @@ run_eval_phase1() {
     echo "[skip-eval] ${name}/seed${seed}: metrics_test_tta.json exists"
     return
   fi
-  python eval.py --ckpt "${ckpt}" --config "${cfg}" --tta --split test
+  python eval_phase1.py --ckpt "${ckpt}" --config "${cfg}" --tta --split test
 }
 
 run_eval_phase2() {
