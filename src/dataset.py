@@ -14,7 +14,7 @@ import math
 import random
 import sys
 from pathlib import Path
-from typing import Callable, Literal, Optional
+from typing import Callable, Literal, Optional, Sequence
 
 import numpy as np
 import torch
@@ -304,19 +304,16 @@ class BitempDataset(Dataset):
         return vec
 
 
-def _compute_sampler_weights(
+def _inv_sqrt_n_pos_weights(
     records: list[dict], phase: int, family: Optional[str]
 ) -> torch.Tensor:
-    """Per-sample weights for ``WeightedRandomSampler``.
+    """Default sparsity-based weighting: ``w_i = 1 / sqrt(1 + n_pos_i)``.
 
-    Uses ``w_i = 1 / sqrt(1 + n_positives_i)`` to up-sample the rare
-    multi-label tail without over-weighting the heaviest pairs. In
-    Phase 1, ``n_positives`` counts positives in the target family
-    only; in Phase 2, it sums positives across all three families.
+    Up-samples the rare multi-label tail without over-weighting heavily-
+    labeled pairs. Does not look at which class is rare — purely a function
+    of how many positives a sample carries in the target family (Phase 1)
+    or across all three families (Phase 2).
     """
-    if phase == 1 and family is None:
-        raise ValueError("phase 1 requires cfg['experiment']['family']")
-
     weights = torch.empty(len(records), dtype=torch.double)
     for i, rec in enumerate(records):
         if phase == 1:
@@ -332,6 +329,95 @@ def _compute_sampler_weights(
             )
         weights[i] = 1.0 / math.sqrt(1.0 + n_pos)
     return weights
+
+
+def _class_aware_weights(
+    records: list[dict], families: Sequence[str]
+) -> torch.Tensor:
+    """Class-aware sampler weights for long-tail multi-label.
+
+    For each sample with at least one positive across the given
+    ``families``, weight is the maximum inverse-frequency across the
+    sample's labels (taken over all label-family combinations):
+
+        w_i = max_{(fam, c) in labels(i)} (1 / freq[fam][c])
+
+    This pushes any sample containing a rare class — in any family —
+    to a high weight, approximately equalising the per-class expected
+    count across an epoch. Samples with no positives anywhere (no-change
+    across all targeted families) receive the **median** of the weighted-
+    sample weights so they remain represented at roughly the same
+    fraction as before (needed for the auxiliary no-change head to keep
+    learning).
+
+    Phase 1 passes a single-element ``families`` list; Phase 2 passes
+    all three families.
+    """
+    if not families:
+        raise ValueError("families must be non-empty")
+
+    freq: dict[tuple[str, str], int] = {}
+    for rec in records:
+        for fam in families:
+            for label in rec.get(f"{fam}_labels", []):
+                if label != _NONE_LABEL:
+                    freq[(fam, label)] = freq.get((fam, label), 0) + 1
+
+    weights = torch.zeros(len(records), dtype=torch.double)
+    weighted_vals: list[float] = []
+    for i, rec in enumerate(records):
+        inv_freqs: list[float] = []
+        for fam in families:
+            for label in rec.get(f"{fam}_labels", []):
+                if label != _NONE_LABEL and (fam, label) in freq:
+                    inv_freqs.append(1.0 / freq[(fam, label)])
+        if inv_freqs:
+            w = max(inv_freqs)
+            weights[i] = w
+            weighted_vals.append(w)
+
+    # Fill no-change samples with the median weight so they keep ~28%
+    # representation rather than collapsing to zero probability.
+    if weighted_vals:
+        weighted_vals.sort()
+        median_w = weighted_vals[len(weighted_vals) // 2]
+    else:
+        median_w = 1.0
+    for i in range(len(records)):
+        if weights[i] == 0.0:
+            weights[i] = median_w
+
+    return weights
+
+
+def _compute_sampler_weights(
+    records: list[dict],
+    phase: int,
+    family: Optional[str],
+    weight_formula: str = "inv_sqrt_n_pos",
+) -> torch.Tensor:
+    """Dispatch on ``cfg.sampler.weight_formula``.
+
+    Supported values:
+        ``"inv_sqrt_n_pos"`` (default): see ``_inv_sqrt_n_pos_weights``.
+        ``"class_aware"``: see ``_class_aware_weights`` (Phase 1 only).
+    """
+    if phase == 1 and family is None:
+        raise ValueError("phase 1 requires cfg['experiment']['family']")
+
+    name = weight_formula.lower()
+    if name in ("inv_sqrt_n_pos", "1/sqrt(1+n_pos)", "1/sqrt(1+n_pos_total)"):
+        return _inv_sqrt_n_pos_weights(records, phase=phase, family=family)
+    if name in ("class_aware", "class-aware"):
+        if phase == 1:
+            assert family is not None  # narrowed by the phase==1 check above
+            return _class_aware_weights(records, families=(family,))
+        # Phase 2 (or any later phase) — balance across all three label families.
+        return _class_aware_weights(records, families=LABEL_FAMILIES)
+    raise ValueError(
+        f"unknown sampler.weight_formula {weight_formula!r}; "
+        f"expected 'inv_sqrt_n_pos' or 'class_aware'"
+    )
 
 
 def _worker_init_fn(worker_id: int) -> None:
@@ -392,7 +478,11 @@ def build_dataloaders(
     val_ds = BitempDataset(split="val", transform=transform_eval, **common)
     test_ds = BitempDataset(split="test", transform=transform_eval, **common)
 
-    weights = _compute_sampler_weights(train_ds.records, phase=phase, family=family)
+    sampler_cfg = cfg.get("sampler", {})
+    weight_formula = str(sampler_cfg.get("weight_formula", "inv_sqrt_n_pos"))
+    weights = _compute_sampler_weights(
+        train_ds.records, phase=phase, family=family, weight_formula=weight_formula,
+    )
     sampler_gen = torch.Generator().manual_seed(seed)
     sampler = WeightedRandomSampler(
         weights=weights,

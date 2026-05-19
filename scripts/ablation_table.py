@@ -108,6 +108,44 @@ ROWS: list[RowSpec] = [
             "phase1_{family}/seed{seed}/metrics_test_thr.json", SEEDS),
     RowSpec("P1: tuned thr, +TTA",
             "phase1_{family}/seed{seed}/metrics_test_tta_thr.json", SEEDS),
+    # No-change gate (auxiliary head used at inference; matches Phase-2 protocol).
+    RowSpec("P1: default 0.5, +TTA, +gate",
+            "phase1_{family}/seed{seed}/metrics_test_tta_gate.json", SEEDS,
+            note="multiplicative gate from head_nochg"),
+    # Long-tail loss experiment — DBLoss on the heaviest-imbalance family.
+    # Default 0.5 is uncalibrated (DBLoss intentionally shifts negatives);
+    # the tuned-thr row is the fair comparison for macro-F1.
+    RowSpec("P1: DBLoss, default 0.5 +TTA  (uncalibrated)",
+            "phase1_{family}_dbloss/seed{seed}/metrics_test_tta.json", SEEDS,
+            note="object only (270:1 imbalance)",
+            families=("object",)),
+    RowSpec("P1: DBLoss, tuned thr +TTA  (calibrated)",
+            "phase1_{family}_dbloss/seed{seed}/metrics_test_tta_thr.json", SEEDS,
+            note="object only (270:1 imbalance)",
+            families=("object",)),
+    # Data-level long-tail: class-aware sampler (max 1/freq per sample).
+    # Per-family rows so we can fill in as runs complete; once all three
+    # exist, drop the family= restriction or add a "Mean" row.
+    RowSpec("P1: class-aware sampler (object)",
+            "phase1_{family}_classaware/seed{seed}/metrics_test_tta.json", SEEDS,
+            note="~8:1 class balance vs 302:1",
+            families=("object",)),
+    RowSpec("P1: class-aware sampler + tuned thr (object)",
+            "phase1_{family}_classaware/seed{seed}/metrics_test_tta_thr.json", SEEDS,
+            note="threshold tuned on val",
+            families=("object",)),
+    RowSpec("P1: class-aware sampler (event)",
+            "phase1_{family}_classaware/seed{seed}/metrics_test_tta.json", SEEDS,
+            note="~3:1 class balance vs 31:1",
+            families=("event",)),
+    RowSpec("P1: class-aware sampler (attribute)",
+            "phase1_{family}_classaware/seed{seed}/metrics_test_tta.json", SEEDS,
+            note="~11:1 class balance vs 62:1",
+            families=("attribute",)),
+    # Phase-2 class-aware: balances across all three families simultaneously.
+    RowSpec("P2: BIT + class-aware sampler",
+            "phase2_bit_only_classaware/seed{seed}/metrics_test_tta_gate.json", SEEDS,
+            note="rebalances across all 3 families"),
     # Phase-2 ablations (variant labels emit different files; family axis runs
     # inside the same JSON, so we re-use the same path for all families)
     RowSpec("P2: no BIT, linear heads, fixed weights",
