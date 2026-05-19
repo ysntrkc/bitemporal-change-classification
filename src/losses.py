@@ -2,16 +2,20 @@
 
 Phase 1 uses ``AsymmetricLoss`` (Ridnik et al., ICCV 2021) on the
 single family head plus a fixed-weight BCE on the no-change head.
-Phase 2 uses ``UncertaintyWeightedLoss`` (Kendall, Gal & Cipolla,
-CVPR 2018) to balance the four task losses (object / event /
-attribute ASL + no-change BCE) with 4 learnable log-σ parameters.
+``DistributionBalancedLoss`` (Wu et al., ECCV 2020) is a drop-in
+alternative for the same head, targeted at long-tailed multi-label
+problems. Phase 2 uses ``UncertaintyWeightedLoss`` (Kendall, Gal &
+Cipolla, CVPR 2018) to balance the four task losses with 4 learnable
+log-σ parameters.
 """
 
 from __future__ import annotations
 
 import logging
+import math
 
 import torch
+import torch.nn.functional as F
 from torch import Tensor, nn
 
 logger = logging.getLogger(__name__)
@@ -73,6 +77,122 @@ class AsymmetricLoss(nn.Module):
             loss = loss * ((1.0 - pt) ** one_sided_gamma)
 
         return -loss.mean()
+
+
+class DistributionBalancedLoss(nn.Module):
+    """Distribution-Balanced Loss for multi-label long-tail classification.
+
+    Wu et al., "Distribution-Balanced Loss for Multi-Label Classification
+    in Long-Tailed Datasets", ECCV 2020.
+
+    Combines two corrections on top of standard binary cross-entropy:
+
+    1. **Rebalanced positive weighting (R-BCE).** Class ``c`` with
+       ``n_c`` positives in ``N`` training samples gets a positive
+       weight ``w_c = ((n_max / n_c) ** kappa)``, capped at
+       ``max_pos_weight``. This compensates for the over-suppression of
+       rare classes that arises in multi-label co-occurrence.
+
+    2. **Negative-tolerant regularisation (NTR).** Each class has a
+       fixed log-prior bias ``ν_c = log(n_c / (N - n_c))``. On the
+       negative branch the logit is shifted and scaled — the loss
+       becomes ``-log(1 - σ(λ * (z_c - ν_c))) / λ``. The shift makes
+       "easy" majority negatives (already matching the prior) contribute
+       near-zero gradient; the ``1/λ`` factor keeps overall scale
+       comparable to plain BCE.
+
+    Reduces to BCE in the degenerate case ``n_c = N/2 ∀ c`` and
+    ``kappa = 0``, ``λ = 1``.
+
+    Args:
+        class_freq: ``[C]`` positive counts per class on the training set
+            (integer or float; cast to float internally).
+        n_train: total training-set size (``N``).
+        kappa: exponent on the rebalanced-positive weight (paper default
+            ~0.05–0.1; lower = less aggressive rebalancing).
+        neg_scale: ``λ`` on the negative branch (paper default 2.0).
+        max_pos_weight: cap on ``w_c`` to keep extreme tails from
+            dominating the gradient (default 10.0).
+        eps: numerical floor on ``n_c`` so log-prior is finite when a
+            class has zero training positives (rare but possible after
+            split-leakage filtering).
+        nochg_bias: optional extra bias added to all negative-branch
+            logits (set to a non-zero value to break ties on cold
+            starts; default 0.0).
+
+    Notes:
+        * ``class_freq`` and ``n_train`` are required at construction
+          and frozen — they're computed once over the training split.
+        * Returns the **mean** over (batch × classes), matching the
+          convention used by ``AsymmetricLoss``.
+    """
+
+    def __init__(
+        self,
+        class_freq: Tensor,
+        n_train: int,
+        kappa: float = 0.05,
+        neg_scale: float = 2.0,
+        max_pos_weight: float = 10.0,
+        eps: float = 1.0,
+        nochg_bias: float = 0.0,
+    ):
+        super().__init__()
+        if class_freq.ndim != 1:
+            raise ValueError(f"class_freq must be 1-D; got shape {tuple(class_freq.shape)}")
+        if n_train <= 0:
+            raise ValueError(f"n_train must be positive; got {n_train}")
+        if neg_scale <= 0:
+            raise ValueError(f"neg_scale must be > 0; got {neg_scale}")
+
+        n_c = class_freq.float().clamp(min=eps)              # [C]
+        n_neg = (float(n_train) - n_c).clamp(min=eps)        # [C]
+        n_max = float(n_c.max().item())
+
+        # Rebalanced positive weight, capped.
+        pos_weight = (n_max / n_c).pow(kappa).clamp(max=max_pos_weight)   # [C]
+        # Per-class negative-branch logit bias prior (log-odds of positive).
+        bias_prior = torch.log(n_c / n_neg) + nochg_bias                  # [C]
+
+        # Buffers so they ride device.to(...) and are saved into the
+        # state dict (which lets eval reconstruct identical objects).
+        self.register_buffer("pos_weight", pos_weight, persistent=True)
+        self.register_buffer("bias_prior", bias_prior, persistent=True)
+        self.neg_scale = float(neg_scale)
+        self.kappa = float(kappa)
+        self.max_pos_weight = float(max_pos_weight)
+        self.n_train = int(n_train)
+
+        logger.info(
+            "DBLoss init | C=%d N=%d κ=%.3f λ=%.2f | "
+            "pos_weight: min=%.3f median=%.3f max=%.3f | "
+            "bias_prior: min=%.3f median=%.3f max=%.3f",
+            int(class_freq.numel()), n_train, kappa, neg_scale,
+            float(pos_weight.min()), float(pos_weight.median()), float(pos_weight.max()),
+            float(bias_prior.min()), float(bias_prior.median()), float(bias_prior.max()),
+        )
+
+    def forward(self, logits: Tensor, targets: Tensor) -> Tensor:
+        if logits.shape != targets.shape:
+            raise ValueError(
+                f"logits and targets shape mismatch: {tuple(logits.shape)} "
+                f"vs {tuple(targets.shape)}"
+            )
+        if logits.shape[-1] != self.pos_weight.shape[0]:
+            raise ValueError(
+                f"logits last-dim {logits.shape[-1]} != C={self.pos_weight.shape[0]}"
+            )
+
+        # Positive branch: w_c * y * (-log σ(z))
+        log_p = F.logsigmoid(logits)                             # [B, C]
+        pos_loss = self.pos_weight * targets * (-log_p)          # broadcast over batch
+
+        # Negative branch with NTR shift+scale: -(1/λ) * (1-y) * log(1 - σ(λ(z - ν)))
+        shifted = self.neg_scale * (logits - self.bias_prior)    # [B, C]
+        log_1mp = F.logsigmoid(-shifted)                          # log(1 - σ(λ(z - ν)))
+        neg_loss = (1.0 - targets) * (-log_1mp) / self.neg_scale
+
+        return (pos_loss + neg_loss).mean()
 
 
 class UncertaintyWeightedLoss(nn.Module):
