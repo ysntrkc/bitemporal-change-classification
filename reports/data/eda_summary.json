@@ -1,0 +1,91 @@
+{
+  "n_records": 10855,
+  "split_counts": {
+    "train": 8438,
+    "test": 1227,
+    "val": 1190
+  },
+  "no_change_counts": {
+    "test": 341,
+    "train": 2386,
+    "val": 340
+  },
+  "no_change_fraction": {
+    "train": 0.2827684285375681,
+    "val": 0.2857142857142857,
+    "test": 0.27791361043194784
+  },
+  "family_class_counts": {
+    "object": {
+      "building": 7022,
+      "tree": 1082,
+      "road": 1025,
+      "field": 463,
+      "vegetation": 280,
+      "water": 279,
+      "parking": 219,
+      "land": 114,
+      "roof": 87,
+      "asphalt": 54,
+      "green": 32,
+      "plant": 26
+    },
+    "event": {
+      "build": 3272,
+      "remove": 2188,
+      "turn": 1306,
+      "appear": 1293,
+      "replace": 1029,
+      "change": 659,
+      "destroy": 589,
+      "increase": 372,
+      "vegetate": 301,
+      "add": 236,
+      "surround": 154,
+      "remain": 115
+    },
+    "attribute": {
+      "blue": 3679,
+      "gray": 2294,
+      "green": 1768,
+      "large": 1415,
+      "huge": 1173,
+      "black": 1170,
+      "white": 718,
+      "more": 548,
+      "small": 528,
+      "brown": 426,
+      "empty": 424,
+      "bare": 378,
+      "lush": 351,
+      "middle": 288,
+      "red": 221,
+      "residential": 213,
+      "long": 210,
+      "industrial": 194,
+      "adjacent": 145,
+      "sparse": 122,
+      "dense": 90,
+      "paved": 70,
+      "same": 57,
+      "dark": 55
+    }
+  },
+  "positives_per_sample_stats": {
+    "object": {
+      "mean": 0.9841547673883003,
+      "max": 4,
+      "zero_count": 3067
+    },
+    "event": {
+      "mean": 1.0607093505297098,
+      "max": 4,
+      "zero_count": 3067
+    },
+    "attribute": {
+      "mean": 1.5234454168585905,
+      "max": 4,
+      "zero_count": 3067
+    }
+  }
+}
