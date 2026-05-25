@@ -1,0 +1,8 @@
+# Ablation: Phase-2 without the BIT fusion (passthrough).
+experiment:
+  phase: 2
+  name: phase2_no_bit
+  output_dir: results/phase2_no_bit/seed42
+model:
+  fusion:
+    type: passthrough

@@ -1,0 +1,6 @@
+experiment:
+  phase: 1
+  name: phase1_object
+  family: object
+  n_classes: 12
+  output_dir: results/phase1_object/seed42

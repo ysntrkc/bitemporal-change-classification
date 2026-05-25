@@ -1,0 +1,6 @@
+experiment:
+  phase: 1
+  name: phase1_event
+  family: event
+  n_classes: 12
+  output_dir: results/phase1_event/seed42

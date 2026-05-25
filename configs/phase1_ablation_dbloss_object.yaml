@@ -1,0 +1,15 @@
+# Long-tail loss experiment: DBLoss on the 270:1-imbalanced object family.
+experiment:
+  phase: 1
+  name: phase1_object_dbloss
+  family: object
+  n_classes: 12
+  output_dir: results/phase1_object_dbloss/seed42
+loss:
+  family: dbloss
+  dbloss:
+    kappa: 0.3
+    neg_scale: 2.0
+    max_pos_weight: 15.0
+    eps: 1.0
+    nochg_bias: 0.0

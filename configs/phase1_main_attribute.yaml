@@ -1,0 +1,6 @@
+experiment:
+  phase: 1
+  name: phase1_attribute
+  family: attribute
+  n_classes: 24
+  output_dir: results/phase1_attribute/seed42

@@ -1,0 +1,10 @@
+# A1 ablation: same canonical recipe with ResNet-50 backbone.
+experiment:
+  phase: 1
+  name: phase1_object_resnet50
+  family: object
+  n_classes: 12
+  output_dir: results/phase1_object_resnet50/seed42
+model:
+  backbone: resnet50.a1_in1k
+  droppath: 0.0

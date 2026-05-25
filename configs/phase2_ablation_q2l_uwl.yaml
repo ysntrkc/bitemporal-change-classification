@@ -1,0 +1,17 @@
+# Full stack: BIT + Q2L heads + uncertainty-weighted multi-task loss.
+experiment:
+  phase: 2
+  name: phase2_unified
+  output_dir: results/phase2_unified/seed42
+model:
+  heads:
+    type: query2label
+    dim: 512
+    nhead: 8
+    decoder_layers: 1
+    dropout: 0.1
+loss:
+  type: uncertainty_weighted
+  per_family: asl
+  nochg: bce
+  init_log_sigma: 0.0

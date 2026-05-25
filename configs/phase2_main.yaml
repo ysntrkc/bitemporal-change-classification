@@ -1,0 +1,5 @@
+# Phase-2 canonical: BIT fusion + linear heads + fixed-weight ASL.
+experiment:
+  phase: 2
+  name: phase2_bit_only
+  output_dir: results/phase2_bit_only/seed42
