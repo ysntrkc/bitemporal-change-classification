@@ -22,7 +22,7 @@ CKPT = "results/phase2_bit_only/seed42/best_ema.pth"
 CONFIG = "configs/phase2_main.yaml"
 DATASET_JSON = "dataset/dataset.json"
 DATASET_ROOT = Path("dataset")
-OUT_PATH = Path("results/phase2_qualitative.png")
+OUT_PATH = Path("reports/figs/teaser.png")
 TTA_OPS = ("orig", "hflip", "vflip", "rot180")
 
 FAMILIES = ("object", "event", "attribute")
@@ -43,20 +43,22 @@ def _per_sample_macro_f1(probs: np.ndarray, targets: np.ndarray,
     return f1.astype(np.float32)
 
 
-def _label_text(labels: list[str], probs: np.ndarray, vocab: list[str],
-                threshold: float = 0.5) -> str:
+def _pred_text(probs: np.ndarray, vocab: list[str], threshold: float = 0.5) -> str:
     above = [(i, probs[i]) for i in range(len(vocab)) if probs[i] >= threshold]
     above.sort(key=lambda t: -t[1])
     if not above:
-        return "(no predictions)"
-    return "\n".join(f"{vocab[i]} (p={p:.2f})" for i, p in above)
+        return "(none)"
+    return "\n".join(f"{vocab[i]}  p={p:.2f}" for i, p in above)
+
+
+def _gt_text(labels: list[str]) -> str:
+    return ", ".join(labels) if labels else "(none)"
 
 
 def main() -> None:
     cfg = load_config(CONFIG)
     seed_everything(int(cfg["experiment"].get("seed", 42)))
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
     vocab = json.loads(Path(cfg["data"]["vocab_path"]).read_text())
 
     model = build_model(cfg).to(device)
@@ -88,11 +90,9 @@ def main() -> None:
     change_probs = np.concatenate(all_change, axis=0)
     fam_probs = {fam: np.concatenate(all_probs[fam], axis=0) for fam in FAMILIES}
     fam_targets = {fam: np.concatenate(all_targets[fam], axis=0) for fam in FAMILIES}
-    # Apply the no-change gate
     for fam in FAMILIES:
         fam_probs[fam] = fam_probs[fam] * change_probs[:, None]
 
-    # 2) Per-sample multi-family F1 (mean over 3 families) for ranking.
     per_fam_f1 = {fam: _per_sample_macro_f1(fam_probs[fam], fam_targets[fam])
                   for fam in FAMILIES}
     has_pos = np.zeros(len(all_sample_ids), dtype=bool)
@@ -100,65 +100,53 @@ def main() -> None:
         has_pos |= fam_targets[fam].sum(axis=1) > 0
     sample_f1 = np.mean([per_fam_f1[fam] for fam in FAMILIES], axis=0)
 
-    # Successes: highest F1 among samples with positives.
-    candidate_succ = np.where(has_pos)[0]
-    top_succ = candidate_succ[np.argsort(-sample_f1[candidate_succ])[:2]]
-    # Failures: lowest F1 among samples with positives (to avoid trivial cases).
-    bot_fail = candidate_succ[np.argsort(sample_f1[candidate_succ])[:2]]
-    picks = list(top_succ) + list(bot_fail)
-    labels = ["success", "success", "failure", "failure"]
-    print("picks:")
-    for idx, lab in zip(picks, labels):
-        print(f"  [{lab}] {all_sample_ids[idx]}  per-sample F1={sample_f1[idx]:.3f}  "
-              f"p_change={change_probs[idx]:.2f}")
+    candidates = np.where(has_pos)[0]
+    top_succ = int(candidates[np.argmax(sample_f1[candidates])])
+    bot_fail = int(candidates[np.argmin(sample_f1[candidates])])
+    picks = [(top_succ, "success"), (bot_fail, "failure")]
+    print("teaser picks:")
+    for idx, lab in picks:
+        print(f"  [{lab}] {all_sample_ids[idx]}  F1={sample_f1[idx]:.3f}  "
+              f"p_chg={change_probs[idx]:.2f}")
 
-    # 3) Lookup raw image paths from dataset.json by sample_id.
     blob = json.loads(Path(DATASET_JSON).read_text())
     by_id = {r["sample_id"]: r for r in blob["images"]}
 
-    # 4) Render
-    n_rows = len(picks)
-    fig, axes = plt.subplots(n_rows, 4, figsize=(14, 3.2 * n_rows),
-                             gridspec_kw={"width_ratios": [1, 1, 1.1, 1.6]})
-    for row, (idx, lab) in enumerate(zip(picks, labels)):
+    fig, axes = plt.subplots(2, 4, figsize=(15, 8),
+                             gridspec_kw={"width_ratios": [1, 1, 1.3, 1.7]})
+    for row, (idx, lab) in enumerate(picks):
         rec = by_id[all_sample_ids[idx]]
         a_img = Image.open(DATASET_ROOT / rec["rgb_A"]).convert("RGB")
         b_img = Image.open(DATASET_ROOT / rec["rgb_B"]).convert("RGB")
 
-        gt_text_lines = []
-        pred_text_lines = []
+        gt_lines, pred_lines = [], []
         for fam in FAMILIES:
-            gt_labels = rec.get(f"{fam}_labels", []) or []
-            gt_text_lines.append(f"[{fam}] {', '.join(gt_labels) if gt_labels else '—'}")
-            pred_text_lines.append(
-                f"[{fam}]\n" + _label_text(gt_labels, fam_probs[fam][idx], vocab[fam])
-            )
-        gt_text = "\n".join(gt_text_lines)
-        pred_text = "\n\n".join(pred_text_lines)
+            gt = rec.get(f"{fam}_labels", []) or []
+            gt_lines.append(f"[{fam}]  {_gt_text(gt)}")
+            pred_lines.append(f"[{fam}]\n{_pred_text(fam_probs[fam][idx], vocab[fam])}")
 
         ax_a, ax_b, ax_gt, ax_pred = axes[row]
         ax_a.imshow(a_img); ax_a.set_xticks([]); ax_a.set_yticks([])
         ax_b.imshow(b_img); ax_b.set_xticks([]); ax_b.set_yticks([])
-        ax_a.set_ylabel(f"{lab}\np_change={change_probs[idx]:.2f}", fontsize=10,
-                        labelpad=8)
+        color = "#0a7a32" if lab == "success" else "#aa1822"
+        ax_a.set_ylabel(f"{lab}\nF1={sample_f1[idx]:.2f}  P(chg)={change_probs[idx]:.2f}",
+                        fontsize=11, color=color, labelpad=10)
         if row == 0:
-            ax_a.set_title("A (pre)")
-            ax_b.set_title("B (post)")
-            ax_gt.set_title("ground truth", loc="left")
-            ax_pred.set_title("predictions (TTA + gate, threshold 0.5)", loc="left")
+            ax_a.set_title("A (pre)", fontsize=11)
+            ax_b.set_title("B (post)", fontsize=11)
+            ax_gt.set_title("ground truth", fontsize=11, loc="left")
+            ax_pred.set_title("predictions (threshold 0.5)", fontsize=11, loc="left")
 
         ax_gt.axis("off")
-        ax_gt.text(0.0, 0.95, gt_text, va="top", ha="left", fontsize=9,
-                   family="monospace")
+        ax_gt.text(0.0, 0.97, "\n".join(gt_lines), va="top", ha="left",
+                   fontsize=10, family="monospace")
         ax_pred.axis("off")
-        ax_pred.text(0.0, 0.95, pred_text, va="top", ha="left", fontsize=9,
-                     family="monospace")
+        ax_pred.text(0.0, 0.97, "\n\n".join(pred_lines), va="top", ha="left",
+                     fontsize=10, family="monospace")
 
-    fig.suptitle("Phase-2 BIT-only qualitative examples (test split, seed 42)",
-                 fontsize=12)
-    fig.tight_layout(rect=(0, 0, 1, 0.97))
+    fig.tight_layout()
     OUT_PATH.parent.mkdir(parents=True, exist_ok=True)
-    fig.savefig(OUT_PATH, dpi=150, bbox_inches="tight")
+    fig.savefig(OUT_PATH, dpi=180, bbox_inches="tight")
     plt.close(fig)
     print(f"saved -> {OUT_PATH}")
 

@@ -1,13 +1,16 @@
 from __future__ import annotations
 
 import json
+import sys
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 import numpy as np
 import torch
-import yaml
 
 from src.augment import EvalTransform
+from src.config import load_config
 from src.dataset import build_dataloaders
 from src.metrics import compute_metrics, tta_forward
 from src.model import build_model
@@ -72,7 +75,7 @@ def main() -> None:
     # ---- Phase 1: one ckpt per (family, seed) ----
     p1_rows: dict[tuple[str, int], dict[str, float]] = {}
     for fam in FAMILIES:
-        cfg = yaml.safe_load(Path(f"configs/phase1_main_{fam}.yaml").read_text())
+        cfg = load_config(f"configs/phase1_main_{fam}.yaml")
         for seed in SEEDS:
             ckpt_path = Path(f"results/phase1_{fam}/seed{seed}/best_ema.pth")
             if not ckpt_path.exists():
@@ -97,7 +100,7 @@ def main() -> None:
 
     # ---- Phase 2 BIT-only canonical ----
     p2_rows: dict[int, dict[str, dict[str, float]]] = {}
-    cfg2 = yaml.safe_load(Path("configs/phase2_main.yaml").read_text())
+    cfg2 = load_config("configs/phase2_main.yaml")
     for seed in SEEDS:
         ckpt_path = Path(f"results/phase2_bit_only/seed{seed}/best_ema.pth")
         if not ckpt_path.exists():
