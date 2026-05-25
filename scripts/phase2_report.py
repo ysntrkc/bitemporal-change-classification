@@ -1,16 +1,3 @@
-"""Generate Phase-2 report artifacts (mirrors scripts/phase1_report.py).
-
-Produces:
-    results/phase2_table.md          — main results table (mean ± std over 3 seeds)
-                                       with a side-by-side delta vs Phase 1.
-    results/phase2_<fam>_per_class_f1.png — per-class F1 bar charts (3-seed mean ± std)
-    results/phase2_<fam>_curves.png       — train/val loss + per-family + mean macro-F1
-
-Reads ``metrics_test_tta_gate.json`` (TTA + no-change gate — our canonical
-config) and ``train_log.csv`` from each seed directory under
-``results/phase2_bit_only/seed<k>/``.
-"""
-
 from __future__ import annotations
 
 import json
@@ -34,7 +21,6 @@ def _load_metrics(seed: int) -> dict:
 
 
 def _load_phase1_table() -> dict[str, dict[str, tuple[float, float]]]:
-    """Parse the existing Phase-1 markdown table back into numbers."""
     text = (RESULTS_DIR / "phase1_table.md").read_text().splitlines()
     result: dict[str, dict[str, tuple[float, float]]] = {}
     metric_keys = ["macro_f1", "micro_f1", "precision_macro", "recall_macro", "mAP"]
@@ -81,7 +67,7 @@ def build_table() -> None:
     p1 = _load_phase1_table()
 
     lines: list[str] = []
-    lines.append("# Phase-2 results — BIT-only (TTA + no-change gate, EMA, test split)")
+    lines.append("# Phase-2 results: BIT-only (TTA + no-change gate, EMA, test split)")
     lines.append("")
     lines.append("Mean ± std over 3 seeds (42, 1337, 2024). All numbers higher is better.")
     lines.append("")
@@ -125,7 +111,6 @@ def build_table() -> None:
 
 
 def plot_per_class_f1() -> None:
-    """Per-family horizontal bars: mean per-class F1 across 3 seeds, sorted by mean."""
     for fam in FAMILIES:
         labels = VOCAB[fam]
         per_class = np.array([_load_metrics(s)[fam]["per_class_f1"] for s in SEEDS])
@@ -144,7 +129,7 @@ def plot_per_class_f1() -> None:
         ax.set_yticklabels(sorted_labels, fontsize=9)
         ax.set_xlim(0, max(0.6, float(sorted_mean.max() + sorted_std.max() + 0.05)))
         ax.set_xlabel("F1 (test, TTA + no-change gate, mean ± std over 3 seeds)")
-        ax.set_title(f"Phase-2 BIT-only per-class F1 — {fam} ({len(labels)} classes)")
+        ax.set_title(f"Phase-2 BIT-only per-class F1: {fam} ({len(labels)} classes)")
         ax.grid(axis="x", linestyle=":", alpha=0.5)
         fig.tight_layout()
         out = RESULTS_DIR / f"phase2_{fam}_per_class_f1.png"
@@ -154,7 +139,6 @@ def plot_per_class_f1() -> None:
 
 
 def plot_train_curves() -> None:
-    """One unified figure per seed: train_loss / val_loss / per-family + mean macro-F1."""
     frames: list[pd.DataFrame] = []
     for seed in SEEDS:
         csv = RUN_DIR / f"seed{seed}" / "train_log.csv"

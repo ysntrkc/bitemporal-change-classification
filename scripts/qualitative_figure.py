@@ -1,19 +1,3 @@
-"""Build the qualitative-examples figure (Fig. 5).
-
-Selects 2 success and 2 failure cases from the test split using the
-canonical Phase-2 BIT-only seed-42 EMA checkpoint, then renders a
-4-row × 4-column grid:
-
-    [ A image | B image | ground-truth labels | predicted labels (p) ]
-
-Success cases: highest per-sample macro-F1 across the 3 families.
-Failure cases: lowest per-sample macro-F1 *among samples that have at
-least one positive label in some family* (to avoid trivial all-zero
-cases dominating the failure bucket).
-
-Output: ``results/phase2_qualitative.png``.
-"""
-
 from __future__ import annotations
 
 import json
@@ -46,9 +30,6 @@ FAMILY_Y_KEY = {"object": "y_obj", "event": "y_evt", "attribute": "y_attr"}
 
 def _per_sample_macro_f1(probs: np.ndarray, targets: np.ndarray,
                          threshold: float = 0.5) -> np.ndarray:
-    """Compute per-sample F1 across classes, treating each sample as one
-    multi-label instance. Returns ``[N]`` array.
-    """
     preds = (probs >= threshold).astype(np.int64)
     y = targets.astype(np.int64)
     tp = ((preds == 1) & (y == 1)).sum(axis=1)
@@ -70,7 +51,6 @@ def _apply_tta(x: torch.Tensor, op: str) -> torch.Tensor:
 
 def _label_text(labels: list[str], probs: np.ndarray, vocab: list[str],
                 threshold: float = 0.5) -> str:
-    """Pretty-print 'class (p=.NN)' lines for predicted classes above threshold."""
     above = [(i, probs[i]) for i in range(len(vocab)) if probs[i] >= threshold]
     above.sort(key=lambda t: -t[1])
     if not above:
@@ -192,7 +172,7 @@ def main() -> None:
         ax_pred.text(0.0, 0.95, pred_text, va="top", ha="left", fontsize=9,
                      family="monospace")
 
-    fig.suptitle("Phase-2 BIT-only — qualitative examples (test split, seed 42)",
+    fig.suptitle("Phase-2 BIT-only qualitative examples (test split, seed 42)",
                  fontsize=12)
     fig.tight_layout(rect=(0, 0, 1, 0.97))
     OUT_PATH.parent.mkdir(parents=True, exist_ok=True)

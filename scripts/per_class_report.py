@@ -1,23 +1,3 @@
-"""Per-class metrics aggregator.
-
-Reads ``metrics_test_tta.json`` from every Phase-1 seed directory under
-``results/<prefix>/seed{42,1337,2024}/``, aligns each per-class scalar
-with the label name from ``configs/label_vocab.json``, computes mean ±
-std across seeds, and emits two artefacts per family-set:
-
-* ``results/per_class_metrics.json`` — full structured dump.
-* ``results/per_class_metrics.md`` — markdown tables, classes sorted
-  by descending support so rare-class behaviour is easy to scan.
-
-For each class the columns are: support (test positives), per-seed
-F1 mean ± std, per-seed precision mean ± std, per-seed recall mean ±
-std, per-seed AP mean ± std.
-
-By default it covers ``phase1_object``, ``phase1_event``,
-``phase1_attribute``. Override with ``--prefixes`` to point at
-ablation runs (e.g. ``phase1_object_dbloss``).
-"""
-
 from __future__ import annotations
 
 import argparse
@@ -36,7 +16,6 @@ SEEDS = (42, 1337, 2024)
 
 
 def _stats(values: list[float]) -> tuple[float, float]:
-    """Mean and population std, NaN-tolerant. Returns (NaN, NaN) if all NaN."""
     clean = [v for v in values if not (isinstance(v, float) and math.isnan(v))]
     if not clean:
         return float("nan"), float("nan")
@@ -52,7 +31,7 @@ def _fmt(mean: float, std: float, ndigits: int = 4) -> str:
 
 
 def _family_from_prefix(prefix: str) -> str:
-    """``phase1_object_dbloss`` -> ``object``."""
+    # phase1_object_dbloss -> object
     stem = prefix.removeprefix("phase1_")
     return stem.split("_", 1)[0]
 
@@ -68,7 +47,7 @@ def collect_family(prefix: str, vocab: dict[str, list[str]]) -> dict[str, Any]:
     for seed in SEEDS:
         path = RESULTS / prefix / f"seed{seed}" / "metrics_test_tta.json"
         if not path.exists():
-            logger.warning("missing %s — skipping seed %d", path, seed)
+            logger.warning("missing %s, skipping seed %d", path, seed)
             continue
         with path.open("r", encoding="utf-8") as f:
             seed_payloads[seed] = json.load(f)
@@ -106,7 +85,7 @@ def collect_family(prefix: str, vocab: dict[str, list[str]]) -> dict[str, Any]:
         p_m,  p_s  = _stats(p_vals)
         r_m,  r_s  = _stats(r_vals)
         ap_m, ap_s = _stats(ap_vals)
-        # support is deterministic — identical across seeds. Sanity-check.
+        # support is deterministic across seeds; sanity-check.
         if len(set(sup_vals)) > 1:
             logger.warning(
                 "%s class %s: support varies across seeds %s",

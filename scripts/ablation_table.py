@@ -1,14 +1,3 @@
-"""Build the Phase-1 + Phase-2 ablation table (Table II).
-
-Combines every saved ``metrics_test*.json`` into a single markdown table.
-Phase-1 rows aggregate mean ± std over 3 seeds × 3 families. Phase-2
-ablation rows that only ran one seed are reported as single-seed
-numbers (clearly marked). The canonical Phase-2 BIT-only row spans 3
-seeds and gets mean ± std.
-
-Output: ``results/ablation_table.md``.
-"""
-
 from __future__ import annotations
 
 import json
@@ -24,15 +13,8 @@ SEEDS = (42, 1337, 2024)
 
 @dataclass
 class RowSpec:
-    """One ablation row.
-
-    ``json_pattern`` accepts ``{family}`` and ``{seed}`` placeholders. ``seeds``
-    is the seed list to aggregate; pass a single-element list for one-seed rows.
-    ``families`` restricts which families this row populates (e.g., the
-    ResNet-50 baseline is Object-only).
-    """
     label: str
-    json_pattern: str
+    json_pattern: str  # accepts {family} and {seed} placeholders
     seeds: tuple[int, ...]
     note: str = ""
     families: tuple[str, ...] = FAMILIES
@@ -56,7 +38,6 @@ def _load_macro_f1(path: Path, family: str | None = None) -> float | None:
 
 
 def _aggregate_row(row: RowSpec) -> dict[str, tuple[float, float] | None]:
-    """Return {family: (mean, std)} plus 'mean' across families. None on missing."""
     out: dict[str, tuple[float, float] | None] = {}
     fam_means: list[float] = []
     for fam in FAMILIES:
@@ -93,10 +74,8 @@ def _fmt(v: tuple[float, float] | None, multi_seed: bool) -> str:
 
 
 ROWS: list[RowSpec] = [
-    # A1: same recipe with ResNet-50 backbone — motivates the ConvNeXt-V2 choice.
     RowSpec("A1: ResNet-50 + ASL  (backbone swap)",
             "phase1_{family}_resnet50/seed{seed}/metrics_test_tta.json", SEEDS),
-    # Phase-1 canonical and its two eval-time ablations (same checkpoints).
     RowSpec("P1: ConvNeXt-V2 + ASL, no TTA",
             "phase1_{family}/seed{seed}/metrics_test.json", SEEDS),
     RowSpec("P1: ConvNeXt-V2 + ASL, +TTA  (canonical)",
@@ -104,9 +83,6 @@ ROWS: list[RowSpec] = [
     RowSpec("P1: canonical, +TTA, +gate",
             "phase1_{family}/seed{seed}/metrics_test_tta_gate.json", SEEDS,
             note="multiplicative gate from head_nochg"),
-    # Long-tail loss experiment — DBLoss on the heaviest-imbalance family.
-    # Default 0.5 is uncalibrated (DBLoss intentionally shifts negatives);
-    # the tuned-thr row is the fair comparison for macro-F1.
     RowSpec("P1: DBLoss, default 0.5 +TTA  (uncalibrated)",
             "phase1_{family}_dbloss/seed{seed}/metrics_test_tta.json", SEEDS,
             note="object only (270:1 imbalance)",
@@ -115,7 +91,6 @@ ROWS: list[RowSpec] = [
             "phase1_{family}_dbloss/seed{seed}/metrics_test_tta_thr.json", SEEDS,
             note="object only (270:1 imbalance)",
             families=("object",)),
-    # Phase-2 ablations — all 3 seeds for fair mean ± std comparison.
     RowSpec("P2: BIT, linear heads, fixed weights  (canonical)",
             "phase2_bit_only/seed{seed}/metrics_test_tta_gate.json", SEEDS),
     RowSpec("P2: no BIT, linear heads, fixed weights",
@@ -131,7 +106,7 @@ def main() -> None:
     rows_data: list[tuple[RowSpec, dict]] = [(r, _aggregate_row(r)) for r in ROWS]
 
     lines: list[str] = []
-    lines.append("# Ablation table — macro-F1 on test split (EMA weights)")
+    lines.append("# Ablation table: macro-F1 on test split (EMA weights)")
     lines.append("")
     lines.append("All rows: mean ± std over 3 seeds (42, 1337, 2024). "
                  "DBLoss row is object-only (heaviest 270:1 imbalance).")

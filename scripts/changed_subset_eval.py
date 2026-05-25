@@ -1,18 +1,3 @@
-"""Compute macro-F1 restricted to samples where is_change=1 (Task 4.11).
-
-The full-test macro-F1 averages over ~340 unchanged pairs (which should
-have all-zero labels) and ~850 changed pairs. The model's mistakes on
-unchanged pairs (extra false positives that "shouldn't be there")
-suppress the headline number. This script reports the changed-subset
-F1 — a cleaner measure of "when the model is asked to identify what
-changed, how well does it do?" — for both the Phase-1 canonical and
-Phase-2 BIT-only canonical checkpoints across all 3 seeds.
-
-Output: ``results/changed_subset_table.md``.
-
-Usage: python scripts/changed_subset_eval.py
-"""
-
 from __future__ import annotations
 
 import json
