@@ -11,12 +11,13 @@ Course project for BLM5135 (Deep Learning and Neural Networks Fundamentals).
 ## Layout
 
 ```
-src/                shared modules (dataset, models, losses, metrics,
-                    augment, ema, utils, config)
-configs/            YAML deltas, one per experiment
-scripts/            launchers and reporting helpers
-train_phase{1,2}.py training entry points
-eval_phase{1,2}.py  evaluation entry points
+src/                  shared modules (dataset, models, losses, metrics,
+                      augment, ema, utils, config)
+configs/              YAML deltas, one per experiment
+scripts/launchers/    bash launchers for training/evaluation
+scripts/reporting/    Python helpers that produce tables and figures
+train_phase{1,2}.py   training entry points
+eval_phase{1,2}.py    evaluation entry points
 ```
 
 The YAMLs are intentionally small. Common hyperparameters and architecture
@@ -45,16 +46,16 @@ python -c "import torch; print(torch.cuda.is_available(), torch.cuda.is_bf16_sup
 
 ## Training and evaluation
 
-Bulk launchers under `scripts/` are resume-safe: they skip any
+Bulk launchers under `scripts/launchers/` are resume-safe: they skip any
 (config, seed) pair whose `best_ema.pth` already exists.
 
 ```
-bash scripts/run_phase1_main.sh                # canonical Phase 1, 3 families x 3 seeds
-bash scripts/run_phase1_ablation_resnet50.sh   # A1: ResNet-50 backbone swap
-bash scripts/run_phase1_ablation_dbloss.sh     # DBLoss on the object family
-bash scripts/run_phase2_main.sh                # canonical Phase 2 (BIT + linear + fixed)
-bash scripts/run_phase2_ablation_no_bit.sh     # fusion ablation (passthrough)
-bash scripts/run_phase2_ablation_q2l_uwl.sh    # full stack (Q2L heads + UWL)
+bash scripts/launchers/run_phase1_main.sh                # canonical Phase 1, 3 families x 3 seeds
+bash scripts/launchers/run_phase1_ablation_resnet50.sh   # A1: ResNet-50 backbone swap
+bash scripts/launchers/run_phase1_ablation_dbloss.sh     # DBLoss on the object family
+bash scripts/launchers/run_phase2_main.sh                # canonical Phase 2 (BIT + linear + fixed)
+bash scripts/launchers/run_phase2_ablation_no_bit.sh     # fusion ablation (passthrough)
+bash scripts/launchers/run_phase2_ablation_q2l_uwl.sh    # full stack (Q2L heads + UWL)
 ```
 
 Single-run usage:
@@ -71,9 +72,10 @@ to use those thresholds at test time. Phase 2 eval has `--gate` / `--no-gate`
 for the multiplicative no-change gate; the default is taken from
 `cfg.inference.nochg_gate`.
 
-After all runs land, `python scripts/ablation_table.py` regenerates
-`results/ablation_table.md` from whatever metrics JSONs are on disk, and
-the per-class breakdown comes from `python scripts/per_class_report.py`.
+After all runs land, `python scripts/reporting/ablation_table.py`
+regenerates `results/ablation_table.md` from whatever metrics JSONs are
+on disk, and the per-class breakdown comes from
+`python scripts/reporting/per_class_report.py`.
 
 ## Reproducibility
 

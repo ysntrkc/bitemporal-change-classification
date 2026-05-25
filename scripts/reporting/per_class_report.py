@@ -64,7 +64,7 @@ def collect_family(prefix: str, vocab: dict[str, list[str]]) -> dict[str, Any]:
         if missing:
             raise KeyError(
                 f"{prefix}/seed{seed}: metrics JSON missing keys {missing}; "
-                f"re-run `bash scripts/regen_canonical_eval.sh {prefix}`"
+                f"re-run eval for this checkpoint"
             )
         for k in required:
             if len(d[k]) != n_classes:

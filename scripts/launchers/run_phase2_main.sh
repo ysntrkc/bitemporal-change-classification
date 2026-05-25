@@ -27,4 +27,4 @@ for seed in "${SEEDS[@]}"; do
   python eval_phase2.py --ckpt "${ckpt}" --config "${CONFIG}" --tta --gate
 done
 
-python scripts/phase2_report.py
+python scripts/reporting/phase2_report.py

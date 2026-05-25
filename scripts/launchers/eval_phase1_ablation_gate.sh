@@ -35,4 +35,4 @@ for prefix in "${PREFIXES[@]}"; do
   done
 done
 
-python scripts/ablation_table.py
+python scripts/reporting/ablation_table.py

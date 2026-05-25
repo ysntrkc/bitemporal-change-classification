@@ -30,4 +30,4 @@ for fam in "${FAMILIES[@]}"; do
   done
 done
 
-python scripts/ablation_table.py
+python scripts/reporting/ablation_table.py

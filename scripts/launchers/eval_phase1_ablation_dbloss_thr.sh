@@ -23,6 +23,6 @@ for seed in "${SEEDS[@]}"; do
     --tta --apply-thresholds "${thr}" --split test
 done
 
-python scripts/ablation_table.py
-python scripts/per_class_report.py \
+python scripts/reporting/ablation_table.py
+python scripts/reporting/per_class_report.py \
   --prefixes phase1_object phase1_event phase1_attribute phase1_object_dbloss
