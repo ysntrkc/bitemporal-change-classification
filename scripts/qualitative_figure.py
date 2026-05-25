@@ -32,7 +32,7 @@ from src.model import Phase2Model
 from src.utils import load_checkpoint, seed_everything
 
 CKPT = "results/phase2_bit_only/seed42/best_ema.pth"
-CONFIG = "configs/phase2_bit_only.yaml"
+CONFIG = "configs/phase2_main.yaml"
 DATASET_JSON = "dataset/dataset.json"
 DATASET_ROOT = Path("dataset")
 OUT_PATH = Path("results/phase2_qualitative.png")

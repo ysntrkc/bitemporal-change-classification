@@ -93,23 +93,15 @@ def _fmt(v: tuple[float, float] | None, multi_seed: bool) -> str:
 
 
 ROWS: list[RowSpec] = [
-    # Weak baseline (3 families × 3 seeds) — anchors "why ConvNeXt-V2 + ASL?"
-    RowSpec("A0: ResNet-50 + BCE",
-            "phase1_{family}_resnet50_bce/seed{seed}/metrics_test_tta.json", SEEDS),
-    # Backbone-swap: same recipe, ResNet-50 backbone (isolates the backbone choice)
+    # A1: same recipe with ResNet-50 backbone — motivates the ConvNeXt-V2 choice.
     RowSpec("A1: ResNet-50 + ASL  (backbone swap)",
             "phase1_{family}_resnet50/seed{seed}/metrics_test_tta.json", SEEDS),
-    # Phase-1 ablations (4 flavors × 3 seeds × 3 families)
-    RowSpec("P1: default 0.5, no TTA",
+    # Phase-1 canonical and its two eval-time ablations (same checkpoints).
+    RowSpec("P1: ConvNeXt-V2 + ASL, no TTA",
             "phase1_{family}/seed{seed}/metrics_test.json", SEEDS),
-    RowSpec("P1: default 0.5, +TTA  (canonical)",
+    RowSpec("P1: ConvNeXt-V2 + ASL, +TTA  (canonical)",
             "phase1_{family}/seed{seed}/metrics_test_tta.json", SEEDS),
-    RowSpec("P1: tuned thr, no TTA",
-            "phase1_{family}/seed{seed}/metrics_test_thr.json", SEEDS),
-    RowSpec("P1: tuned thr, +TTA",
-            "phase1_{family}/seed{seed}/metrics_test_tta_thr.json", SEEDS),
-    # No-change gate (auxiliary head used at inference; matches Phase-2 protocol).
-    RowSpec("P1: default 0.5, +TTA, +gate",
+    RowSpec("P1: canonical, +TTA, +gate",
             "phase1_{family}/seed{seed}/metrics_test_tta_gate.json", SEEDS,
             note="multiplicative gate from head_nochg"),
     # Long-tail loss experiment — DBLoss on the heaviest-imbalance family.
@@ -123,41 +115,15 @@ ROWS: list[RowSpec] = [
             "phase1_{family}_dbloss/seed{seed}/metrics_test_tta_thr.json", SEEDS,
             note="object only (270:1 imbalance)",
             families=("object",)),
-    # Data-level long-tail: class-aware sampler (max 1/freq per sample).
-    # Per-family rows so we can fill in as runs complete; once all three
-    # exist, drop the family= restriction or add a "Mean" row.
-    RowSpec("P1: class-aware sampler (object)",
-            "phase1_{family}_classaware/seed{seed}/metrics_test_tta.json", SEEDS,
-            note="~8:1 class balance vs 302:1",
-            families=("object",)),
-    RowSpec("P1: class-aware sampler + tuned thr (object)",
-            "phase1_{family}_classaware/seed{seed}/metrics_test_tta_thr.json", SEEDS,
-            note="threshold tuned on val",
-            families=("object",)),
-    RowSpec("P1: class-aware sampler (event)",
-            "phase1_{family}_classaware/seed{seed}/metrics_test_tta.json", SEEDS,
-            note="~3:1 class balance vs 31:1",
-            families=("event",)),
-    RowSpec("P1: class-aware sampler (attribute)",
-            "phase1_{family}_classaware/seed{seed}/metrics_test_tta.json", SEEDS,
-            note="~11:1 class balance vs 62:1",
-            families=("attribute",)),
-    # Phase-2 class-aware: balances across all three families simultaneously.
-    RowSpec("P2: BIT + class-aware sampler",
-            "phase2_bit_only_classaware/seed{seed}/metrics_test_tta_gate.json", SEEDS,
-            note="rebalances across all 3 families"),
-    # Phase-2 ablations (variant labels emit different files; family axis runs
-    # inside the same JSON, so we re-use the same path for all families)
-    RowSpec("P2: no BIT, linear heads, fixed weights",
-            "phase2_no_bit/seed{seed}/metrics_test_tta_gate.json", (42,),
-            note="single seed"),
+    # Phase-2 ablations — all 3 seeds for fair mean ± std comparison.
     RowSpec("P2: BIT, linear heads, fixed weights  (canonical)",
             "phase2_bit_only/seed{seed}/metrics_test_tta_gate.json", SEEDS),
-    RowSpec("P2: BIT, ResNet-50 backbone  (backbone swap)",
-            "phase2_bit_only_resnet50/seed{seed}/metrics_test_tta_gate.json", SEEDS),
+    RowSpec("P2: no BIT, linear heads, fixed weights",
+            "phase2_no_bit/seed{seed}/metrics_test_tta_gate.json", SEEDS,
+            note="fusion ablation"),
     RowSpec("P2: BIT, Q2L heads, UWL  (full stack)",
-            "phase2_unified/seed{seed}/metrics_test_tta_gate.json", (42,),
-            note="single seed"),
+            "phase2_unified/seed{seed}/metrics_test_tta_gate.json", SEEDS,
+            note="head + loss ablation"),
 ]
 
 
@@ -167,9 +133,8 @@ def main() -> None:
     lines: list[str] = []
     lines.append("# Ablation table — macro-F1 on test split (EMA weights)")
     lines.append("")
-    lines.append("Phase-1 rows: mean ± std over 3 seeds (42, 1337, 2024). "
-                 "Phase-2 rows marked 'single seed' use seed 42 only — these are "
-                 "ablation probes, not headline numbers.")
+    lines.append("All rows: mean ± std over 3 seeds (42, 1337, 2024). "
+                 "DBLoss row is object-only (heaviest 270:1 imbalance).")
     lines.append("")
     header = "| variant | object | event | attribute | **mean** | notes |"
     sep = "|---|---:|---:|---:|---:|---|"

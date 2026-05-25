@@ -109,7 +109,7 @@ def main() -> None:
     # ---- Phase 1: one ckpt per (family, seed) ----
     p1_rows: dict[tuple[str, int], dict[str, float]] = {}
     for fam in FAMILIES:
-        cfg = yaml.safe_load(Path(f"configs/phase1_{fam}.yaml").read_text())
+        cfg = yaml.safe_load(Path(f"configs/phase1_main_{fam}.yaml").read_text())
         for seed in SEEDS:
             ckpt_path = Path(f"results/phase1_{fam}/seed{seed}/best_ema.pth")
             if not ckpt_path.exists():
@@ -134,7 +134,7 @@ def main() -> None:
 
     # ---- Phase 2 BIT-only canonical ----
     p2_rows: dict[int, dict[str, dict[str, float]]] = {}
-    cfg2 = yaml.safe_load(Path("configs/phase2_bit_only.yaml").read_text())
+    cfg2 = yaml.safe_load(Path("configs/phase2_main.yaml").read_text())
     for seed in SEEDS:
         ckpt_path = Path(f"results/phase2_bit_only/seed{seed}/best_ema.pth")
         if not ckpt_path.exists():
