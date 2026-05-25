@@ -312,28 +312,31 @@ def _draw_legend(fig, fig_w: float, fig_h: float, y_in: float) -> None:
         x += w + 0.03
 
 
-def render_teaser(picks_data: list[dict]) -> None:
-    """picks_data[i] keys:
-       sample_id, f1, p_change, row_kind ('success'|'failure'),
-       a_img, b_img, chips_per_family"""
-    fig_w, fig_h = 8.4, 5.4
-    img_size = 1.95
+def render_card_figure(picks_data: list[dict], out_path: Path,
+                       *, img_size: float = 1.95) -> None:
+    """N-row card layout: per row a status strip, A/B images, and a panel
+    with F1 + P(change) header and per-family TP/FN/FP chips.
+
+    Each pick dict has: sample_id, f1, p_change, row_kind, a_img, b_img,
+    chips_per_family.
+    """
+    n_rows = len(picks_data)
+    if n_rows == 0:
+        raise ValueError("picks_data must be non-empty")
+
     strip_w = 0.32
     gap_x = 0.10
     left_margin = 0.18
     panel_left = left_margin + strip_w + gap_x + 2 * img_size + 2 * gap_x
-    panel_w = fig_w - panel_left - 0.18
     row_gap = 0.18
     top_pad_for_titles = 0.45
     legend_h = 0.55
-    rows_total_h = 2 * img_size + row_gap
-    # vertical layout
-    rows_top = fig_h - top_pad_for_titles
-    row1_y = rows_top - img_size
-    row2_y = row1_y - row_gap - img_size
+
+    fig_w = 8.4
+    fig_h = top_pad_for_titles + n_rows * img_size + (n_rows - 1) * row_gap + legend_h
+    panel_w = fig_w - panel_left - 0.18
 
     fig = plt.figure(figsize=(fig_w, fig_h), facecolor="white")
-
     layout = {
         "img_size": img_size,
         "a_x": left_margin + strip_w + gap_x,
@@ -341,27 +344,25 @@ def render_teaser(picks_data: list[dict]) -> None:
         "panel_x": panel_left,
     }
 
-    for i, (pk, y) in enumerate(zip(picks_data, [row1_y, row2_y])):
+    rows_top = fig_h - top_pad_for_titles
+    row_ys = [rows_top - i * (img_size + row_gap) - img_size for i in range(n_rows)]
+
+    for pk, y in zip(picks_data, row_ys):
         edge = ROW_COLOR[pk["row_kind"]]
         _draw_status_strip(
             fig, (left_margin, y, strip_w, img_size), fig_w, fig_h, pk["row_kind"]
         )
         _draw_image_panel(
             fig, pk["a_img"], (layout["a_x"], y, img_size, img_size),
-            fig_w, fig_h, edge,
-            title=None,
+            fig_w, fig_h, edge, title=None,
         )
         _draw_image_panel(
             fig, pk["b_img"], (layout["b_x"], y, img_size, img_size),
-            fig_w, fig_h, edge,
-            title=None,
+            fig_w, fig_h, edge, title=None,
         )
-        # Panel slightly taller than image to host header + chips
-        panel_y = y - 0.05
-        panel_h = img_size + 0.10
         _draw_panel(
             fig,
-            (layout["panel_x"], panel_y, panel_w, panel_h),
+            (layout["panel_x"], y - 0.05, panel_w, img_size + 0.10),
             fig_w, fig_h,
             row_kind=pk["row_kind"], f1=pk["f1"], p_change=pk["p_change"],
             chips_per_family=pk["chips_per_family"],
@@ -370,14 +371,18 @@ def render_teaser(picks_data: list[dict]) -> None:
 
     _draw_column_titles(fig, fig_w, fig_h, layout)
 
-    legend_y = max(0.15, row2_y - legend_h - 0.05)
+    legend_y = max(0.15, row_ys[-1] - legend_h - 0.05)
     _draw_legend(fig, fig_w, fig_h, legend_y)
 
-    OUT_PATH.parent.mkdir(parents=True, exist_ok=True)
-    fig.savefig(OUT_PATH, dpi=300, bbox_inches="tight",
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(out_path, dpi=300, bbox_inches="tight",
                 pad_inches=0.06, facecolor="white")
     plt.close(fig)
-    print(f"saved -> {OUT_PATH}")
+    print(f"saved -> {out_path}")
+
+
+def render_teaser(picks_data: list[dict]) -> None:
+    render_card_figure(picks_data, OUT_PATH)
 
 
 def main() -> None:
