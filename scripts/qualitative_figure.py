@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Sequence
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -12,7 +11,8 @@ from PIL import Image
 
 from src.augment import EvalTransform
 from src.dataset import build_dataloaders
-from src.model import Phase2Model
+from src.metrics import tta_forward
+from src.model import build_model
 from src.utils import load_checkpoint, seed_everything
 
 CKPT = "results/phase2_bit_only/seed42/best_ema.pth"
@@ -23,8 +23,8 @@ OUT_PATH = Path("results/phase2_qualitative.png")
 TTA_OPS = ("orig", "hflip", "vflip", "rot180")
 
 FAMILIES = ("object", "event", "attribute")
-FAMILY_LOGITS_KEY = {"object": "logits_obj", "event": "logits_evt",
-                     "attribute": "logits_attr"}
+FAMILY_PROB_KEY = {"object": "probs_obj", "event": "probs_evt",
+                   "attribute": "probs_attr"}
 FAMILY_Y_KEY = {"object": "y_obj", "event": "y_evt", "attribute": "y_attr"}
 
 
@@ -38,15 +38,6 @@ def _per_sample_macro_f1(probs: np.ndarray, targets: np.ndarray,
     denom = 2 * tp + fp + fn
     f1 = np.where(denom > 0, 2 * tp / np.maximum(denom, 1), 0.0)
     return f1.astype(np.float32)
-
-
-def _apply_tta(x: torch.Tensor, op: str) -> torch.Tensor:
-    return {
-        "orig": x,
-        "hflip": torch.flip(x, dims=[-1]),
-        "vflip": torch.flip(x, dims=[-2]),
-        "rot180": torch.flip(x, dims=[-2, -1]),
-    }[op]
 
 
 def _label_text(labels: list[str], probs: np.ndarray, vocab: list[str],
@@ -65,7 +56,7 @@ def main() -> None:
 
     vocab = json.loads(Path(cfg["data"]["vocab_path"]).read_text())
 
-    model = Phase2Model(cfg).to(device)
+    model = build_model(cfg).to(device)
     ckpt = load_checkpoint(CKPT)
     model.load_state_dict(ckpt["model"])
     model.eval()
@@ -76,32 +67,20 @@ def main() -> None:
         cfg, transform_train=transform, transform_eval=transform
     )
 
-    # 1) Forward the test split (TTA-averaged probs, like canonical eval).
-    all_probs = {fam: [] for fam in FAMILIES}
-    all_targets = {fam: [] for fam in FAMILIES}
-    all_change = []
+    all_probs: dict[str, list[np.ndarray]] = {fam: [] for fam in FAMILIES}
+    all_targets: dict[str, list[np.ndarray]] = {fam: [] for fam in FAMILIES}
+    all_change: list[np.ndarray] = []
     all_sample_ids: list[str] = []
-    n_tta = float(len(TTA_OPS))
-    with torch.no_grad():
-        for batch in test_loader:
-            a = batch["A"].to(device, non_blocking=True)
-            b = batch["B"].to(device, non_blocking=True)
-            fam_sum = {fam: None for fam in FAMILIES}
-            change_sum = None
-            with torch.autocast(device_type="cuda", dtype=torch.bfloat16):
-                for op in TTA_OPS:
-                    out = model(_apply_tta(a, op), _apply_tta(b, op))
-                    p_change = torch.sigmoid(out["logit_nochg"].float())
-                    change_sum = p_change if change_sum is None else change_sum + p_change
-                    for fam in FAMILIES:
-                        p = torch.sigmoid(out[FAMILY_LOGITS_KEY[fam]].float())
-                        fam_sum[fam] = p if fam_sum[fam] is None else fam_sum[fam] + p
-            ch = (change_sum / n_tta).cpu().numpy()
-            all_change.append(ch)
-            for fam in FAMILIES:
-                all_probs[fam].append((fam_sum[fam] / n_tta).cpu().numpy())
-                all_targets[fam].append(batch[FAMILY_Y_KEY[fam]].cpu().numpy())
-            all_sample_ids.extend(batch["sample_id"])
+    for batch in test_loader:
+        a = batch["A"].to(device, non_blocking=True)
+        b = batch["B"].to(device, non_blocking=True)
+        with torch.autocast(device_type="cuda", dtype=torch.bfloat16):
+            out = tta_forward(model, {"A": a, "B": b}, list(TTA_OPS))
+        all_change.append(out["prob_nochg"].cpu().numpy())
+        for fam in FAMILIES:
+            all_probs[fam].append(out[FAMILY_PROB_KEY[fam]].cpu().numpy())
+            all_targets[fam].append(batch[FAMILY_Y_KEY[fam]].cpu().numpy())
+        all_sample_ids.extend(batch["sample_id"])
 
     change_probs = np.concatenate(all_change, axis=0)
     fam_probs = {fam: np.concatenate(all_probs[fam], axis=0) for fam in FAMILIES}

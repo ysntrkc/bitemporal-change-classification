@@ -304,11 +304,12 @@ class Phase2Model(nn.Module):
 
     def forward(self, a: Tensor, b: Tensor) -> dict[str, Tensor]:
         fa, fb = self.encoder(a, b)
+        refined_tokens: Tensor | None = None
         if self.fusion_type == "bit":
+            assert self.bit_fusion is not None
             fa_ref, fb_ref, refined_tokens = self.bit_fusion(fa, fb)
         else:
             fa_ref, fb_ref = fa, fb
-            refined_tokens = None
 
         fa_vec = fa_ref.mean(dim=(2, 3))
         fb_vec = fb_ref.mean(dim=(2, 3))
@@ -316,6 +317,7 @@ class Phase2Model(nn.Module):
         feat = self.fusion_mlp(v)
 
         if self.head_type == "query2label":
+            assert refined_tokens is not None
             feat_q = self.feat_proj(feat).unsqueeze(1)
             tokens_q = self.token_proj(refined_tokens)
             memory = torch.cat([feat_q, tokens_q], dim=1)
@@ -344,7 +346,7 @@ class Phase2Model(nn.Module):
                 head.bias.data.copy_(torch.log(p_clamped / (1.0 - p_clamped)))
 
 
-def build_model(cfg: dict) -> nn.Module:
+def build_model(cfg: dict) -> Phase1Model | Phase2Model:
     phase = cfg["experiment"]["phase"]
     if phase == 1:
         return Phase1Model(cfg)

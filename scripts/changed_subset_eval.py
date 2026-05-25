@@ -9,41 +9,27 @@ import yaml
 
 from src.augment import EvalTransform
 from src.dataset import build_dataloaders
-from src.metrics import compute_metrics
-from src.model import Phase1Model, Phase2Model
+from src.metrics import compute_metrics, tta_forward
+from src.model import build_model
 from src.utils import load_checkpoint, seed_everything
 
 FAMILIES = ("object", "event", "attribute")
 SEEDS = (42, 1337, 2024)
 TTA_OPS = ("orig", "hflip", "vflip", "rot180")
 
-FAM_LOGITS = {"object": "logits_obj", "event": "logits_evt", "attribute": "logits_attr"}
+FAM_PROBS = {"object": "probs_obj", "event": "probs_evt", "attribute": "probs_attr"}
 FAM_Y = {"object": "y_obj", "event": "y_evt", "attribute": "y_attr"}
-
-
-def _apply_tta(x: torch.Tensor, op: str) -> torch.Tensor:
-    return {
-        "orig": x,
-        "hflip": torch.flip(x, dims=[-1]),
-        "vflip": torch.flip(x, dims=[-2]),
-        "rot180": torch.flip(x, dims=[-2, -1]),
-    }[op]
 
 
 @torch.no_grad()
 def _collect_phase1(model, loader, family, device):
-    fam_key = {"object": "y_obj", "event": "y_evt", "attribute": "y_attr"}[family]
+    fam_key = FAM_Y[family]
     probs, tgts, is_change = [], [], []
-    n = float(len(TTA_OPS))
     for batch in loader:
         a = batch["A"].to(device); b = batch["B"].to(device)
-        psum = None
         with torch.autocast(device_type="cuda", dtype=torch.bfloat16):
-            for op in TTA_OPS:
-                out = model(_apply_tta(a, op), _apply_tta(b, op))
-                p = torch.sigmoid(out["logits_family"].float())
-                psum = p if psum is None else psum + p
-        probs.append((psum / n).cpu().numpy())
+            out = tta_forward(model, {"A": a, "B": b}, list(TTA_OPS))
+        probs.append(out["probs_family"].cpu().numpy())
         tgts.append(batch[fam_key].cpu().numpy())
         is_change.append(batch["is_change"].cpu().numpy())
     return (np.concatenate(probs), np.concatenate(tgts), np.concatenate(is_change))
@@ -51,26 +37,18 @@ def _collect_phase1(model, loader, family, device):
 
 @torch.no_grad()
 def _collect_phase2(model, loader, device):
-    fam_probs = {fam: [] for fam in FAMILIES}
-    fam_tgts = {fam: [] for fam in FAMILIES}
-    p_change_list, is_change_list = [], []
-    n = float(len(TTA_OPS))
+    fam_probs: dict[str, list[np.ndarray]] = {fam: [] for fam in FAMILIES}
+    fam_tgts: dict[str, list[np.ndarray]] = {fam: [] for fam in FAMILIES}
+    p_change_list: list[np.ndarray] = []
+    is_change_list: list[np.ndarray] = []
     for batch in loader:
         a = batch["A"].to(device); b = batch["B"].to(device)
-        sums = {fam: None for fam in FAMILIES}
-        change_sum = None
         with torch.autocast(device_type="cuda", dtype=torch.bfloat16):
-            for op in TTA_OPS:
-                out = model(_apply_tta(a, op), _apply_tta(b, op))
-                change_sum = (torch.sigmoid(out["logit_nochg"].float()) if change_sum is None
-                              else change_sum + torch.sigmoid(out["logit_nochg"].float()))
-                for fam in FAMILIES:
-                    p = torch.sigmoid(out[FAM_LOGITS[fam]].float())
-                    sums[fam] = p if sums[fam] is None else sums[fam] + p
-        p_change_list.append((change_sum / n).cpu().numpy())
+            out = tta_forward(model, {"A": a, "B": b}, list(TTA_OPS))
+        p_change_list.append(out["prob_nochg"].cpu().numpy())
         is_change_list.append(batch["is_change"].cpu().numpy())
         for fam in FAMILIES:
-            fam_probs[fam].append((sums[fam] / n).cpu().numpy())
+            fam_probs[fam].append(out[FAM_PROBS[fam]].cpu().numpy())
             fam_tgts[fam].append(batch[FAM_Y[fam]].cpu().numpy())
     return (
         {fam: np.concatenate(fam_probs[fam]) for fam in FAMILIES},
@@ -100,7 +78,7 @@ def main() -> None:
             if not ckpt_path.exists():
                 continue
             seed_everything(seed)
-            model = Phase1Model(cfg).to(device)
+            model = build_model(cfg).to(device)
             ckpt = load_checkpoint(str(ckpt_path))
             model.load_state_dict(ckpt["model"])
             model.eval()
@@ -125,7 +103,7 @@ def main() -> None:
         if not ckpt_path.exists():
             continue
         seed_everything(seed)
-        model = Phase2Model(cfg2).to(device)
+        model = build_model(cfg2).to(device)
         ckpt = load_checkpoint(str(ckpt_path))
         model.load_state_dict(ckpt["model"])
         model.eval()

@@ -22,7 +22,7 @@ from src.dataset import build_dataloaders
 from src.ema import ModelEma
 from src.losses import AsymmetricLoss, FixedWeightLoss, UncertaintyWeightedLoss
 from src.metrics import compute_metrics
-from src.model import build_model
+from src.model import Phase2Model, build_model
 from src.utils import build_optimizer, build_scheduler, save_checkpoint, seed_everything
 
 logger = logging.getLogger(__name__)
@@ -259,6 +259,7 @@ def main(argv: Optional[list[str]] = None) -> int:
     writer = SummaryWriter(log_dir=str(output_dir / "tb"))
 
     model = build_model(cfg).to(device)
+    assert isinstance(model, Phase2Model)
     mean, std = model.encoder.norm_stats()
     n_trainable = sum(p.numel() for p in model.parameters() if p.requires_grad)
     logger.info("model built: %s trainable params", f"{n_trainable:,}")
