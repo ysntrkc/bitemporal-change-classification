@@ -1,0 +1,83 @@
+\begin{figure*}[t]
+  \centering
+  \begin{tikzpicture}[node distance=5mm and 6mm]
+
+    % ---------- Phase 1 (left column) ----------
+    \node[io] (p1A) {$A$};
+    \node[io, right=10mm of p1A] (p1B) {$B$};
+    \node[enc, below=4mm of $(p1A)!0.5!(p1B)$] (p1enc)
+      {ConvNeXt-V2 Tiny\\Siamese encoder (shared)};
+    \node[fuse, below=of p1enc] (p1fuse)
+      {GAP $+$ four-way fusion\\$[f_A;\,f_B;\,|f_A{-}f_B|;\,f_A\odot f_B]$};
+    \node[fuse, below=of p1fuse] (p1mlp)
+      {Linear $\to$ LN $\to$ GELU\\(width 512)};
+    \node[head, below left =6mm and 2mm of p1mlp] (p1head)
+      {family head\\Linear($C_{\!f}$)};
+    \node[head, below right=6mm and 2mm of p1mlp] (p1nc)
+      {nochg head\\Linear(1)};
+    \node[loss, below=10mm of p1mlp] (p1loss)
+      {ASL $\,+\,0{,}2\cdot$ BCE};
+
+    \draw[arr] (p1A) -- (p1enc);
+    \draw[arr] (p1B) -- (p1enc);
+    \draw[arr] (p1enc) -- (p1fuse) node[label] {$f_A,f_B$};
+    \draw[arr] (p1fuse) -- (p1mlp);
+    \draw[arr] (p1mlp.south) |- (p1head.east);
+    \draw[arr] (p1mlp.south) |- (p1nc.west);
+    \draw[arr, dashed] (p1head.south) |- (p1loss.west);
+    \draw[arr, dashed] (p1nc.south)   |- (p1loss.east);
+
+    \node[font=\bfseries\small, above=2mm of p1A,
+      xshift=10mm, anchor=south]
+      {Aşama~1: aile başına tek-görevli (3 model)};
+
+    % ---------- Phase 2 (right column) ----------
+    \node[io, right=42mm of p1B] (p2A) {$A$};
+    \node[io, right=10mm of p2A] (p2B) {$B$};
+    \node[enc, below=4mm of $(p2A)!0.5!(p2B)$] (p2enc)
+      {ConvNeXt-V2 Tiny\\Siamese encoder (shared)};
+    \node[bit, below=of p2enc] (p2bit)
+      {BIT fusion\\token attn $\to$ pre-LN transformer\\
+        $\to$ cross-attn to spatial};
+    \node[fuse, below=of p2bit] (p2mlp)
+      {GAP $+$ four-way fusion\\$+$ MLP (width 512)};
+    \node[head, below=8mm of p2mlp, xshift=-22mm] (p2obj)  {obj\\Linear(12)};
+    \node[head, right=2mm of p2obj]                (p2evt) {evt\\Linear(12)};
+    \node[head, right=2mm of p2evt]                (p2attr){attr\\Linear(24)};
+    \node[head, right=2mm of p2attr]               (p2nc)  {nochg\\Linear(1)};
+    \node[loss, below=6mm of p2evt, xshift=11mm]   (p2loss)
+      {FixedWeightLoss$\{1,1,1,0.2\}$\\(or UncertaintyWeightedLoss)};
+
+    \draw[arr] (p2A) -- (p2enc);
+    \draw[arr] (p2B) -- (p2enc);
+    \draw[arr] (p2enc) -- (p2bit) node[label] {$f_A,f_B$};
+    \draw[arr] (p2bit) -- (p2mlp) node[label] {refined};
+    \draw[arr] (p2mlp.south) -- (p2obj.north);
+    \draw[arr] (p2mlp.south) -- (p2evt.north);
+    \draw[arr] (p2mlp.south) -- (p2attr.north);
+    \draw[arr] (p2mlp.south) -- (p2nc.north);
+    \draw[arr, dashed] (p2obj.south)  |- (p2loss.west);
+    \draw[arr, dashed] (p2evt.south)  -- (p2loss.north);
+    \draw[arr, dashed] (p2attr.south) -- ($(p2loss.north)+(6mm,0)$);
+    \draw[arr, dashed] (p2nc.south)   |- (p2loss.east);
+
+    \node[font=\bfseries\small, above=2mm of p2A,
+      xshift=10mm, anchor=south]
+      {Aşama~2: birleşik çok-görevli (1 model)};
+
+    \node[font=\scriptsize, below=2mm of p2loss, align=center]
+      {Inference gate: $p_{\text{fam}} \leftarrow p_{\text{fam}} \cdot
+        \sigma(\ell_{\text{nochg}})$};
+
+  \end{tikzpicture}
+  \caption{Aşama~1 (sol) ve Aşama~2 (sağ). Her iki yapı ConvNeXt-V2
+    Tiny Siamese encoder'ı paylaşır. Aşama~1, her etiket ailesi için
+    bağımsız üç model eğitir; four-way fusion vektörü küçük bir MLP'ye
+    ve sigmoid family head'e beslenir. Aşama~2 aynı encoder'ı korur,
+    aynı MLP'den önce Bitemporal Image Transformer (BIT) fusion bloğunu
+    yerleştirir ve dört head üretir (üç family logit ve bir nochg
+    skaleri); loss'lar fixed task weights ile toplanır. Full-stack
+    ablation'da Query2Label heads ve uncertainty-weighted loss
+    doğrudan drop-in ikamelerdir.}
+  \label{fig:arch}
+\end{figure*}
