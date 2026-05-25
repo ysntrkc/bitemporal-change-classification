@@ -1,11 +1,3 @@
-"""Training entry point for Phase 1 single-task models.
-
-Usage:
-    python train_phase1.py --config configs/phase1_object.yaml --seed 42
-
-Phase 2 lives in ``train_phase2.py``.
-"""
-
 from __future__ import annotations
 
 import argparse
@@ -21,34 +13,20 @@ from typing import Optional
 import numpy as np
 import torch
 import torch.nn.functional as F
-import yaml
 from torch.utils.tensorboard import SummaryWriter
 
 from src.augment import EvalTransform, PairAug, cutmix_pair
+from src.config import load_config
 from src.dataset import build_dataloaders, build_label_vocab
 from src.ema import ModelEma
 from src.losses import AsymmetricLoss, DistributionBalancedLoss
 from src.metrics import compute_metrics
-from src.model import Phase1Model
+from src.model import build_model
 from src.utils import build_optimizer, build_scheduler, save_checkpoint, seed_everything
 
 logger = logging.getLogger(__name__)
 
 FAMILY_Y_KEY = {"object": "y_obj", "event": "y_evt", "attribute": "y_attr"}
-
-
-def load_config(path: str) -> dict:
-    with Path(path).open("r", encoding="utf-8") as f:
-        return yaml.safe_load(f)
-
-
-def build_model(cfg: dict) -> torch.nn.Module:
-    phase = cfg["experiment"]["phase"]
-    if phase == 1:
-        return Phase1Model(cfg)
-    raise NotImplementedError(
-        f"phase {phase} not handled by train_phase1.py; use train_phase2.py"
-    )
 
 
 def _compute_train_class_freq(cfg: dict, family: str) -> tuple[torch.Tensor, int]:

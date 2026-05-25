@@ -1,10 +1,3 @@
-"""Exponential Moving Average of model weights.
-
-Simple, self-contained implementation. Decay ramps from ~0 to the
-configured value over the first ~``warmup_steps`` steps so early, noisy
-weights don't dominate the average.
-"""
-
 from __future__ import annotations
 
 import copy

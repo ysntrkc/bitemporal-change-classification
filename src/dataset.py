@@ -1,10 +1,3 @@
-"""Data utilities for the bitemporal change classification project.
-
-Currently provides label-vocabulary construction. The dataset class,
-dataloader builder, leakage report, and EDA helpers are added in later
-tasks.
-"""
-
 from __future__ import annotations
 
 import argparse
@@ -14,7 +7,7 @@ import math
 import random
 import sys
 from pathlib import Path
-from typing import Callable, Literal, Optional, Sequence
+from typing import Callable, Literal, Optional
 
 import numpy as np
 import torch
@@ -29,20 +22,7 @@ _NONE_LABEL = "none"
 
 
 def build_label_vocab(json_path: str | Path) -> dict[str, list[str]]:
-    """Build per-family label vocabularies from a ``dataset.json`` file.
-
-    Scans every record in the ``images`` array and collects the unique label
-    strings for each family. The sentinel ``"none"`` is excluded; no-change
-    samples are represented downstream as all-zeros multi-hot vectors in
-    every family.
-
-    Args:
-        json_path: Path to ``dataset.json``.
-
-    Returns:
-        A dict with keys ``"object"``, ``"event"``, ``"attribute"`` mapping
-        to alphabetically sorted label lists (deterministic across runs).
-    """
+    """Sorted per-family label lists; the 'none' sentinel is excluded."""
     path = Path(json_path)
     with path.open("r", encoding="utf-8") as f:
         blob = json.load(f)
@@ -59,22 +39,7 @@ def build_label_vocab(json_path: str | Path) -> dict[str, list[str]]:
 
 
 def leakage_report(json_path: str | Path) -> dict:
-    """Detect base filenames that span more than one split.
-
-    Some train records are pre-computed augmentations named
-    ``<base>_random_augment.png``. They are expected to share their base
-    filename with an un-augmented record in the **same** split. A leakage
-    is any base filename that appears across two or more of
-    ``{train, val, test}``.
-
-    Args:
-        json_path: Path to ``dataset.json``.
-
-    Returns:
-        A dict with keys ``n_violations`` (int) and ``examples`` (list of
-        up to 50 entries, each ``{"base", "splits", "filenames"}``).
-        Deterministic: violations are sorted by base filename.
-    """
+    """Find base filenames (ignoring _random_augment) that span multiple splits."""
     path = Path(json_path)
     with path.open("r", encoding="utf-8") as f:
         blob = json.load(f)
@@ -101,19 +66,7 @@ def leakage_report(json_path: str | Path) -> dict:
 
 
 def eda_report(json_path: str | Path, out_dir: str | Path) -> dict:
-    """Compute dataset statistics and write histograms to ``out_dir``.
-
-    Produces:
-      * ``object_histogram.png`` / ``event_histogram.png`` / ``attribute_histogram.png``
-        — per-family class-frequency bars, sorted descending.
-      * ``positives_per_sample.png`` — for each family, a histogram of how
-        many positive labels each sample carries.
-      * ``split_distribution.png`` — bar chart of split sizes with the
-        fraction of no-change samples per split.
-      * ``summary.json`` — the numerical report that backs every figure.
-
-    Returns the same dict that is written to ``summary.json``.
-    """
+    """Write per-family histograms, positives-per-sample plots, and summary.json."""
     import matplotlib
 
     matplotlib.use("Agg")
@@ -142,7 +95,6 @@ def eda_report(json_path: str | Path, out_dir: str | Path) -> dict:
             family_hist[fam].update(labels)
             pos_per_sample[fam].append(len(labels))
 
-    # Per-family histograms (horizontal bar, sorted desc).
     for fam in LABEL_FAMILIES:
         items = sorted(family_hist[fam].items(), key=lambda kv: -kv[1])
         labels = [k for k, _ in items]
@@ -160,7 +112,6 @@ def eda_report(json_path: str | Path, out_dir: str | Path) -> dict:
         fig.savefig(out / f"{fam}_histogram.png", dpi=150)
         plt.close(fig)
 
-    # Positives-per-sample histogram, one subplot per family.
     fig, axes = plt.subplots(1, 3, figsize=(12, 3.5))
     for ax, fam in zip(axes, LABEL_FAMILIES):
         data = pos_per_sample[fam]
@@ -175,7 +126,6 @@ def eda_report(json_path: str | Path, out_dir: str | Path) -> dict:
     fig.savefig(out / "positives_per_sample.png", dpi=150)
     plt.close(fig)
 
-    # Split distribution with no-change fraction.
     splits = ["train", "val", "test"]
     total = [split_counts.get(s, 0) for s in splits]
     nc = [split_nochange.get(s, 0) for s in splits]
@@ -222,20 +172,6 @@ def eda_report(json_path: str | Path, out_dir: str | Path) -> dict:
 
 
 class BitempDataset(Dataset):
-    """Bitemporal change classification dataset backed by ``dataset.json``.
-
-    Each ``__getitem__`` returns a dict with keys ``"A"``, ``"B"`` (float32
-    tensors shaped ``[3, img_size, img_size]``), ``"y_obj"``, ``"y_evt"``,
-    ``"y_attr"`` (float32 multi-hot vectors), ``"is_change"`` (float32
-    scalar), and ``"sample_id"`` (str).
-
-    The ``transform`` callable, if given, is invoked as ``transform(A, B)``
-    on the two PIL images and must return a pair of tensors — it owns
-    resize and normalization. When ``transform`` is ``None``, a minimal
-    resize + ToTensor fallback is used (un-normalized, ``[0, 1]``); this
-    path is intended for smoke tests only — production loaders wire in a
-    ``PairAug``-style callable.
-    """
 
     def __init__(
         self,
@@ -307,13 +243,9 @@ class BitempDataset(Dataset):
 def _inv_sqrt_n_pos_weights(
     records: list[dict], phase: int, family: Optional[str]
 ) -> torch.Tensor:
-    """Default sparsity-based weighting: ``w_i = 1 / sqrt(1 + n_pos_i)``.
-
-    Up-samples the rare multi-label tail without over-weighting heavily-
-    labeled pairs. Does not look at which class is rare — purely a function
-    of how many positives a sample carries in the target family (Phase 1)
-    or across all three families (Phase 2).
-    """
+    """w_i = 1 / sqrt(1 + n_pos_i), up-sampling sparse multi-label tail."""
+    if phase == 1 and family is None:
+        raise ValueError("phase 1 requires cfg['experiment']['family']")
     weights = torch.empty(len(records), dtype=torch.double)
     for i, rec in enumerate(records):
         if phase == 1:
@@ -331,97 +263,7 @@ def _inv_sqrt_n_pos_weights(
     return weights
 
 
-def _class_aware_weights(
-    records: list[dict], families: Sequence[str]
-) -> torch.Tensor:
-    """Class-aware sampler weights for long-tail multi-label.
-
-    For each sample with at least one positive across the given
-    ``families``, weight is the maximum inverse-frequency across the
-    sample's labels (taken over all label-family combinations):
-
-        w_i = max_{(fam, c) in labels(i)} (1 / freq[fam][c])
-
-    This pushes any sample containing a rare class — in any family —
-    to a high weight, approximately equalising the per-class expected
-    count across an epoch. Samples with no positives anywhere (no-change
-    across all targeted families) receive the **median** of the weighted-
-    sample weights so they remain represented at roughly the same
-    fraction as before (needed for the auxiliary no-change head to keep
-    learning).
-
-    Phase 1 passes a single-element ``families`` list; Phase 2 passes
-    all three families.
-    """
-    if not families:
-        raise ValueError("families must be non-empty")
-
-    freq: dict[tuple[str, str], int] = {}
-    for rec in records:
-        for fam in families:
-            for label in rec.get(f"{fam}_labels", []):
-                if label != _NONE_LABEL:
-                    freq[(fam, label)] = freq.get((fam, label), 0) + 1
-
-    weights = torch.zeros(len(records), dtype=torch.double)
-    weighted_vals: list[float] = []
-    for i, rec in enumerate(records):
-        inv_freqs: list[float] = []
-        for fam in families:
-            for label in rec.get(f"{fam}_labels", []):
-                if label != _NONE_LABEL and (fam, label) in freq:
-                    inv_freqs.append(1.0 / freq[(fam, label)])
-        if inv_freqs:
-            w = max(inv_freqs)
-            weights[i] = w
-            weighted_vals.append(w)
-
-    # Fill no-change samples with the median weight so they keep ~28%
-    # representation rather than collapsing to zero probability.
-    if weighted_vals:
-        weighted_vals.sort()
-        median_w = weighted_vals[len(weighted_vals) // 2]
-    else:
-        median_w = 1.0
-    for i in range(len(records)):
-        if weights[i] == 0.0:
-            weights[i] = median_w
-
-    return weights
-
-
-def _compute_sampler_weights(
-    records: list[dict],
-    phase: int,
-    family: Optional[str],
-    weight_formula: str = "inv_sqrt_n_pos",
-) -> torch.Tensor:
-    """Dispatch on ``cfg.sampler.weight_formula``.
-
-    Supported values:
-        ``"inv_sqrt_n_pos"`` (default): see ``_inv_sqrt_n_pos_weights``.
-        ``"class_aware"``: see ``_class_aware_weights`` (Phase 1 only).
-    """
-    if phase == 1 and family is None:
-        raise ValueError("phase 1 requires cfg['experiment']['family']")
-
-    name = weight_formula.lower()
-    if name in ("inv_sqrt_n_pos", "1/sqrt(1+n_pos)", "1/sqrt(1+n_pos_total)"):
-        return _inv_sqrt_n_pos_weights(records, phase=phase, family=family)
-    if name in ("class_aware", "class-aware"):
-        if phase == 1:
-            assert family is not None  # narrowed by the phase==1 check above
-            return _class_aware_weights(records, families=(family,))
-        # Phase 2 (or any later phase) — balance across all three label families.
-        return _class_aware_weights(records, families=LABEL_FAMILIES)
-    raise ValueError(
-        f"unknown sampler.weight_formula {weight_formula!r}; "
-        f"expected 'inv_sqrt_n_pos' or 'class_aware'"
-    )
-
-
 def _worker_init_fn(worker_id: int) -> None:
-    """Deterministic per-worker seeding."""
     info = torch.utils.data.get_worker_info()
     assert info is not None, "_worker_init_fn must run inside a DataLoader worker"
     seed = info.seed % (2**32)
@@ -434,25 +276,6 @@ def build_dataloaders(
     transform_train: Optional[Callable] = None,
     transform_eval: Optional[Callable] = None,
 ) -> tuple[DataLoader, DataLoader, DataLoader]:
-    """Build ``(train, val, test)`` loaders from a config dict.
-
-    Train uses ``WeightedRandomSampler`` (see ``_compute_sampler_weights``).
-    Val and test iterate in dataset-order, no shuffling. The caller supplies
-    augmentation + normalization via ``transform_train`` and eval-time
-    resize + normalization via ``transform_eval``; both default to ``None``
-    so the ``BitempDataset`` fallback (resize + ToTensor, un-normalized)
-    runs — useful for smoke tests only.
-
-    Args:
-        cfg: Nested dict with ``data``, ``train``, and ``experiment`` keys
-            (see ``configs/phase1_*.yaml`` for the schema).
-        transform_train: Optional ``(PIL, PIL) -> (Tensor, Tensor)`` callable
-            applied to the train split.
-        transform_eval: Optional eval-time transform applied to val and test.
-
-    Returns:
-        ``(train_loader, val_loader, test_loader)``.
-    """
     data_cfg = cfg["data"]
     train_cfg = cfg["train"]
     exp_cfg = cfg["experiment"]
@@ -478,11 +301,7 @@ def build_dataloaders(
     val_ds = BitempDataset(split="val", transform=transform_eval, **common)
     test_ds = BitempDataset(split="test", transform=transform_eval, **common)
 
-    sampler_cfg = cfg.get("sampler", {})
-    weight_formula = str(sampler_cfg.get("weight_formula", "inv_sqrt_n_pos"))
-    weights = _compute_sampler_weights(
-        train_ds.records, phase=phase, family=family, weight_formula=weight_formula,
-    )
+    weights = _inv_sqrt_n_pos_weights(train_ds.records, phase=phase, family=family)
     sampler_gen = torch.Generator().manual_seed(seed)
     sampler = WeightedRandomSampler(
         weights=weights,

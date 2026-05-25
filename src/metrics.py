@@ -1,9 +1,3 @@
-"""Evaluation metrics.
-
-Provides ``compute_metrics``, ``tune_thresholds_per_class``, and
-``tta_forward``.
-"""
-
 from __future__ import annotations
 
 import logging
@@ -29,24 +23,7 @@ def compute_metrics(
     targets: np.ndarray,
     thresholds: np.ndarray,
 ) -> dict:
-    """Compute multi-label classification metrics for one family.
-
-    Args:
-        probs: ``[N, C]`` sigmoid probabilities.
-        targets: ``[N, C]`` multi-hot ground truth in ``{0, 1}``.
-        thresholds: ``[C]`` per-class decision thresholds for binarising
-            probabilities. For default 0.5 evaluation, pass
-            ``np.full(C, 0.5)``.
-
-    Returns:
-        Dict with the following keys (scalars unless noted):
-            ``micro_f1``, ``macro_f1``,
-            ``precision_micro``, ``precision_macro``,
-            ``recall_micro``, ``recall_macro``,
-            ``mAP`` (macro-averaged, threshold-free),
-            ``per_class_f1``, ``per_class_precision``, ``per_class_recall``,
-            ``per_class_ap``, ``per_class_support`` (each ``list`` of length ``C``).
-    """
+    """Multi-label F1/precision/recall (micro+macro) and mAP, plus per-class breakdowns."""
     if probs.shape != targets.shape:
         raise ValueError(
             f"probs and targets shape mismatch: {probs.shape} vs {targets.shape}"
@@ -59,8 +36,7 @@ def compute_metrics(
     preds = (probs >= thresholds[None, :]).astype(np.int64)
     y = targets.astype(np.int64)
 
-    # per-class AP is undefined for classes with zero positives; mark as NaN
-    # so the JSON consumer can distinguish "no support" from "scored zero".
+    # AP is undefined when a class has no positives; NaN distinguishes that from F1=0.
     support = y.sum(axis=0).astype(np.int64)
     per_class_ap: list[float] = []
     for k in range(y.shape[1]):
@@ -100,28 +76,7 @@ def tune_thresholds_per_class(
     targets: np.ndarray,
     steps: np.ndarray = _DEFAULT_STEPS,
 ) -> np.ndarray:
-    """Pick the per-class decision threshold that maximises F1 on the given set.
-
-    For each class ``c`` independently, sweep ``t`` over ``steps`` and pick
-    ``argmax_t F1_c(t)``. Run on the validation set; the returned thresholds
-    are then frozen and applied to test.
-
-    Args:
-        probs: ``[N, C]`` sigmoid probabilities.
-        targets: ``[N, C]`` multi-hot ground truth in ``{0, 1}``.
-        steps: 1-D array of candidate thresholds. Defaults to
-            ``np.arange(0.05, 0.96, 0.02)``.
-
-    Returns:
-        ``[C]`` array of best-F1 thresholds (``float64``).
-
-    Notes:
-        Vectorised over both ``N`` and ``T``. Memory is ``O(N * T)`` per
-        class — for our val sizes (a few thousand × ~46 steps) this is
-        well under a megabyte. Classes with zero positives in ``targets``
-        receive the first step (``steps[0]``) since every threshold ties
-        at F1 = 0; this has no effect on macro-F1.
-    """
+    """Per-class argmax_t F1_c(t) sweep — tune on val, freeze, apply on test."""
     if probs.shape != targets.shape:
         raise ValueError(
             f"probs and targets shape mismatch: {probs.shape} vs {targets.shape}"
@@ -133,12 +88,11 @@ def tune_thresholds_per_class(
     t = steps.shape[0]
     y = targets.astype(np.int64)
 
-    # preds[i, j, k] = (probs[i, k] >= steps[j])
-    # Build per-class to keep memory bounded: peak [N, T] per class.
+    # Per-class loop keeps peak memory to O(N*T) instead of O(N*C*T).
     best = np.empty(c, dtype=np.float64)
     for k in range(c):
-        p = probs[:, k][:, None] >= steps[None, :]      # [N, T] bool
-        yk = y[:, k][:, None]                            # [N, 1]
+        p = probs[:, k][:, None] >= steps[None, :]
+        yk = y[:, k][:, None]
         tp = (p & (yk == 1)).sum(axis=0).astype(np.float64)
         fp = (p & (yk == 0)).sum(axis=0).astype(np.float64)
         fn = (~p & (yk == 1)).sum(axis=0).astype(np.float64)
@@ -174,32 +128,8 @@ def tta_forward(
     batch: dict,
     tta_ops: Sequence[str],
 ) -> dict:
-    """Average sigmoid probabilities over geometric TTA passes.
-
-    For each op in ``tta_ops``, apply the same spatial transform to both
-    ``A`` and ``B`` (preserving correspondence), forward through
-    ``model``, sigmoid the outputs, and accumulate. The class labels are
-    invariant under the supported ops (h-flip, v-flip, 180° rotation),
-    so averaging is pure noise reduction.
-
-    Supported ops: ``"orig"``, ``"hflip"``, ``"vflip"``, ``"rot180"``.
-
-    Args:
-        model: a Phase-1 (or compatible) model returning a dict with
-            ``logits_family`` (``[B, C]``) and ``logit_nochg`` (``[B]``).
-        batch: dict with at least ``"A"`` and ``"B"`` tensors of shape
-            ``[B, 3, H, W]``, already on the model's device.
-        tta_ops: non-empty sequence of op names. Order is irrelevant
-            (the result is a mean).
-
-    Returns:
-        Dict with:
-            ``probs_family``: ``[B, C]`` averaged sigmoid probs (float32).
-            ``prob_nochg``:    ``[B]`` averaged sigmoid prob (float32).
-
-    Notes:
-        Caller is responsible for ``model.eval()`` and any autocast
-        context. ``no_grad`` is enforced by the decorator.
+    """Average sigmoid probs over TTA ops. Returns probs_X/prob_X for each logits_X/logit_X.
+    Caller must put the model in eval() and wrap with autocast if desired.
     """
     if len(tta_ops) == 0:
         raise ValueError("tta_ops must be non-empty")
@@ -209,20 +139,19 @@ def tta_forward(
 
     a = batch["A"]
     b = batch["B"]
-
-    probs_family_sum: torch.Tensor | None = None
-    prob_nochg_sum: torch.Tensor | None = None
+    sums: dict[str, torch.Tensor] = {}
 
     for op in tta_ops:
         out = model(_apply_tta(a, op), _apply_tta(b, op))
-        pf = torch.sigmoid(out["logits_family"].float())
-        pn = torch.sigmoid(out["logit_nochg"].float())
-        probs_family_sum = pf if probs_family_sum is None else probs_family_sum + pf
-        prob_nochg_sum = pn if prob_nochg_sum is None else prob_nochg_sum + pn
+        for key, logit in out.items():
+            if key.startswith("logits_"):
+                out_key = "probs_" + key[len("logits_") :]
+            elif key.startswith("logit_"):
+                out_key = "prob_" + key[len("logit_") :]
+            else:
+                continue
+            prob = torch.sigmoid(logit.float())
+            sums[out_key] = prob if out_key not in sums else sums[out_key] + prob
 
-    assert probs_family_sum is not None and prob_nochg_sum is not None
     n = float(len(tta_ops))
-    return {
-        "probs_family": probs_family_sum / n,
-        "prob_nochg": prob_nochg_sum / n,
-    }
+    return {k: v / n for k, v in sums.items()}

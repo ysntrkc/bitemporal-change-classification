@@ -1,29 +1,3 @@
-"""Evaluation entry point for Phase 1 (Phase 2 reuses unchanged).
-
-Two modes:
-
-* ``--mode tune-thresholds``: forward the chosen split (default ``val``)
-  through the loaded checkpoint, sweep per-class F1 thresholds, save
-  ``thresholds.json`` next to the checkpoint.
-* ``--mode metrics`` (default): forward the chosen split (default
-  ``test``), optionally with TTA and pre-tuned thresholds, save
-  ``metrics_<split>[_tta][_thr].json``.
-
-Examples::
-
-    # Tune per-class thresholds on val
-    python eval_phase1.py --ckpt results/phase1_object/seed42/best_ema.pth \\
-                   --config configs/phase1_object.yaml \\
-                   --mode tune-thresholds --split val
-
-    # Final test metrics with TTA + tuned thresholds
-    python eval_phase1.py --ckpt results/phase1_object/seed42/best_ema.pth \\
-                   --config configs/phase1_object.yaml \\
-                   --tta \\
-                   --apply-thresholds results/phase1_object/seed42/thresholds.json \\
-                   --split test
-"""
-
 from __future__ import annotations
 
 import argparse
@@ -35,31 +9,17 @@ from typing import Optional
 
 import numpy as np
 import torch
-import yaml
 
 from src.augment import EvalTransform
+from src.config import load_config
 from src.dataset import build_dataloaders
 from src.metrics import compute_metrics, tta_forward, tune_thresholds_per_class
-from src.model import Phase1Model
+from src.model import build_model
 from src.utils import load_checkpoint, seed_everything
 
 logger = logging.getLogger(__name__)
 
 FAMILY_Y_KEY = {"object": "y_obj", "event": "y_evt", "attribute": "y_attr"}
-
-
-def load_config(path: str) -> dict:
-    with Path(path).open("r", encoding="utf-8") as f:
-        return yaml.safe_load(f)
-
-
-def build_model(cfg: dict) -> torch.nn.Module:
-    phase = cfg["experiment"]["phase"]
-    if phase == 1:
-        return Phase1Model(cfg)
-    raise NotImplementedError(
-        f"phase {phase} not handled by eval_phase1.py; use eval_phase2.py"
-    )
 
 
 def collect_probs(

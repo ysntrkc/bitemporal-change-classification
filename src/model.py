@@ -1,10 +1,3 @@
-"""Model components: Siamese encoder, fusion, classification heads.
-
-Phase 1: ``SiameseEncoder`` → 4-way fusion → ``Phase1Model``.
-Phase 2: adds ``BITFusion`` (token transformer + cross-attend),
-``Query2LabelHead`` (transformer-decoder classifier), and ``Phase2Model``.
-"""
-
 from __future__ import annotations
 
 import logging
@@ -18,20 +11,7 @@ logger = logging.getLogger(__name__)
 
 
 class SiameseEncoder(nn.Module):
-    """Shared-weight Siamese encoder around a timm backbone.
-
-    A and B are concatenated along the batch dimension and forwarded
-    through a single backbone call (efficiency + identical BatchNorm
-    statistics). Outputs are split back into ``(fA, fB)``.
-
-    For the default ``convnextv2_tiny.fcmae_ft_in22k_in1k`` checkpoint
-    at 224² input, ``fA`` and ``fB`` have shape ``[B, 768, 7, 7]``.
-
-    Attributes:
-        backbone: Underlying timm model, no classifier, no global pool.
-        dim: Number of output channels (``backbone.num_features``).
-        name: timm checkpoint identifier.
-    """
+    """Shared timm backbone applied to A and B in a single batched forward."""
 
     def __init__(
         self,
@@ -51,9 +31,7 @@ class SiameseEncoder(nn.Module):
         self.name = name
         self.dim = self.backbone.num_features
 
-        # The backbone's ``head`` module (pre-logits LayerNorm + classifier
-        # FC) is bypassed by ``forward_features``. Freeze it so its weights
-        # are not touched by optimizer weight-decay updates.
+        # forward_features bypasses backbone.head; freeze it so weight-decay leaves it alone.
         if hasattr(self.backbone, "head"):
             for p in self.backbone.head.parameters():
                 p.requires_grad_(False)
@@ -67,33 +45,18 @@ class SiameseEncoder(nn.Module):
         return fa, fb
 
     def norm_stats(self) -> tuple[tuple[float, ...], tuple[float, ...]]:
-        """Return ``(mean, std)`` for input normalization, from the backbone's timm config."""
         cfg = timm.data.resolve_model_data_config(self.backbone)
         return tuple(cfg["mean"]), tuple(cfg["std"])
 
 
 def _enhanced_4way_fusion(fa_vec: Tensor, fb_vec: Tensor) -> Tensor:
-    """Return ``concat(fA, fB, |fA - fB|, fA ⊙ fB)`` along the last dim."""
+    # concat(fA, fB, |fA - fB|, fA ⊙ fB)
     return torch.cat([fa_vec, fb_vec, (fa_vec - fb_vec).abs(), fa_vec * fb_vec], dim=-1)
 
 
 class BITFusion(nn.Module):
-    """Bitemporal token transformer + cross-attended spatial refinement.
-
-    Each phase's spatial map ``f ∈ [B, dim, H, W]`` is summarised into
-    ``L`` learnable tokens via a shared 1×1-conv attention (softmax over
-    HW). The concatenated ``[tA ; tB] ∈ [B, 2L, dim]`` (with a learnable
-    positional + temporal embedding) is jointly refined by a small pre-LN
-    transformer encoder. Each phase's spatial features then cross-attend
-    to *its* refined tokens, yielding spatially-aware refined feature
-    maps with the original ``[B, dim, H, W]`` shape.
-
-    Returns ``(fa', fb', refined_tokens)`` where ``refined_tokens ∈
-    [B, 2L, dim]`` (first L are A-tokens, last L are B-tokens) — useful
-    as decoder memory for ``Query2LabelHead``.
-
-    Defaults: ``L=4`` tokens per phase, 2 encoder layers, ``nhead=8``,
-    ``d_ff=2·dim``, dropout 0.1, GELU activation.
+    """L tokens per phase → joint pre-LN transformer → cross-attend back to spatial maps.
+    Returns (fa', fb', refined_tokens) where refined_tokens is [B, 2L, dim] (A then B).
     """
 
     def __init__(
@@ -162,15 +125,7 @@ class BITFusion(nn.Module):
 
 
 class Query2LabelHead(nn.Module):
-    """Query2Label-style transformer-decoder classifier head.
-
-    One learnable query per class cross-attends to the supplied memory;
-    the per-query output is projected to a single sigmoid logit. Used
-    three times in Phase 2 (12 / 12 / 24 queries for object / event /
-    attribute) on a shared memory.
-
-    Defaults: 1 decoder layer, pre-LN, GELU, ``d_ff = 2·dim``, dropout 0.1.
-    """
+    """One learnable query per class cross-attends to a shared memory → sigmoid logit each."""
 
     def __init__(
         self,
@@ -196,33 +151,20 @@ class Query2LabelHead(nn.Module):
             norm_first=True,
         )
         self.decoder = nn.TransformerDecoder(decoder_layer, num_layers=1)
-        # Linear projection without bias: per-class bias is learned separately
-        # (initializable to a class-prior logit via ``set_class_prior``) so we
-        # don't start every class at sigmoid(0)=0.5 — that biases multi-label
-        # ASL training toward "predict zero" before queries can differentiate.
-        # Zero-init the projection weights so the initial logit is exactly
-        # ``class_bias`` (no random O(1) signal swamping the prior); the
-        # symmetry breaks on the first gradient step because each query's
-        # decoder output differs.
+        # Bias is a separate parameter so set_class_prior() can init it to log(p/(1-p))
+        # without leaking O(1) random projection noise into the starting logits.
         self.proj = nn.Linear(dim, 1, bias=False)
         nn.init.zeros_(self.proj.weight)
         self.class_bias = nn.Parameter(torch.zeros(n_classes))
 
     def forward(self, memory: Tensor) -> Tensor:
-        """``memory: [B, M, dim]`` → logits ``[B, n_classes]``."""
         b = memory.shape[0]
-        q = self.queries.unsqueeze(0).expand(b, -1, -1)   # [B, N, dim]
-        out = self.decoder(tgt=q, memory=memory)           # [B, N, dim]
-        return self.proj(out).squeeze(-1) + self.class_bias   # [B, N]
+        q = self.queries.unsqueeze(0).expand(b, -1, -1)
+        out = self.decoder(tgt=q, memory=memory)
+        return self.proj(out).squeeze(-1) + self.class_bias
 
     @torch.no_grad()
     def set_class_prior(self, p_pos: Tensor, eps: float = 1e-3) -> None:
-        """Initialize ``class_bias`` so initial ``sigmoid`` output ≈ ``p_pos``.
-
-        ``p_pos`` is a ``[n_classes]`` tensor of empirical positive rates
-        on the training split. Probabilities are floored at ``eps`` to avoid
-        ``log(0)``; the resulting bias is the per-class logit ``log(p/(1-p))``.
-        """
         if p_pos.shape != (self.n_classes,):
             raise ValueError(
                 f"p_pos shape {tuple(p_pos.shape)} != ({self.n_classes},)"
@@ -232,23 +174,7 @@ class Query2LabelHead(nn.Module):
 
 
 class Phase1Model(nn.Module):
-    """Phase 1 single-task model.
-
-    Siamese encoder → global average pool → 4-way fusion
-    ``[fA; fB; |fA - fB|; fA ⊙ fB]`` → FusionMLP → family head (``n_classes``
-    sigmoid logits) + auxiliary no-change head (1 sigmoid logit).
-
-    The same class template is reused for Object (12), Event (12), and
-    Attribute (24) — only ``cfg['experiment']['n_classes']`` differs.
-
-    Expects the following cfg keys:
-        ``experiment.n_classes``: int, head output width.
-        ``model.backbone``: timm checkpoint name.
-        ``model.pretrained``: bool.
-        ``model.droppath``: float (StochasticDepth rate).
-        ``model.fusion_dim``: int (FusionMLP hidden width).
-        ``model.dropout``: float (FusionMLP dropout).
-    """
+    """Siamese → GAP → 4-way fusion → MLP → family head (n_classes) + nochg head (1)."""
 
     def __init__(self, cfg: dict):
         super().__init__()
@@ -286,31 +212,7 @@ class Phase1Model(nn.Module):
 
 
 class Phase2Model(nn.Module):
-    """Phase 2 unified multi-task model.
-
-    Same Siamese encoder as Phase 1, but the GAP-based fusion is
-    replaced by a BITFusion (token transformer + cross-attended
-    refinement), and the single linear head is replaced by three
-    Query2Label decoder heads (one per family, sharing memory). A
-    no-change head is also driven from the pooled fused feature.
-
-    Forward returns ``{"logits_obj", "logits_evt", "logits_attr",
-    "logit_nochg"}`` so the multi-task uncertainty-weighted loss
-    (and inference-time no-change gating) can compute per-family.
-
-    Expected cfg keys:
-        ``experiment.families``: list[str], subset of {object, event, attribute}.
-        ``experiment.label_vocab``: optional path to label_vocab.json
-            (defaults to ``configs/label_vocab.json``); used to resolve
-            per-family class counts.
-        ``model.backbone``, ``model.pretrained``, ``model.droppath``: encoder.
-        ``model.fusion.L``, ``model.fusion.depth``, ``model.fusion.nhead``,
-            ``model.fusion.dropout``: BITFusion knobs.
-        ``model.heads.dim``, ``model.heads.nhead``, ``model.heads.dropout``:
-            Query2Label knobs (decoder dim, heads, dropout).
-        ``model.fusion_dim``: FusionMLP output width (also Q2L dim).
-        ``model.dropout``: FusionMLP dropout.
-    """
+    """Siamese → BITFusion → 3 Q2L heads (per family, shared memory) + nochg head."""
 
     _FAMILY_KEY = {"object": "logits_obj", "event": "logits_evt", "attribute": "logits_attr"}
 
@@ -334,7 +236,7 @@ class Phase2Model(nn.Module):
             pretrained=model_cfg.get("pretrained", True),
             drop_path_rate=model_cfg.get("droppath", 0.1),
         )
-        backbone_dim = self.encoder.dim                 # 768 for ConvNeXt-V2-Tiny
+        backbone_dim = self.encoder.dim
         fusion_dim = int(model_cfg.get("fusion_dim", 512))
         fusion_dropout = float(model_cfg.get("dropout", 0.3))
         head_dim = int(heads_cfg.get("dim", fusion_dim))
@@ -356,12 +258,11 @@ class Phase2Model(nn.Module):
                 L=int(fusion_cfg.get("L", 4)),
                 nhead=int(fusion_cfg.get("nhead", 8)),
                 depth=int(fusion_cfg.get("depth", 2)),
-                dim_ff=fusion_cfg.get("dim_ff"),  # None -> default 2*dim in BITFusion
+                dim_ff=fusion_cfg.get("dim_ff"),
                 dropout=float(fusion_cfg.get("dropout", 0.1)),
             )
         else:
-            # passthrough: skip BIT and use the raw encoder outputs. Only
-            # compatible with linear heads (no refined tokens for Q2L memory).
+            # passthrough is incompatible with Q2L (no refined tokens to use as memory).
             if head_type == "query2label":
                 raise ValueError(
                     "model.fusion.type='passthrough' is incompatible with "
@@ -378,9 +279,6 @@ class Phase2Model(nn.Module):
         )
 
         if head_type == "query2label":
-            # Query2Label: 3 transformer-decoder heads sharing memory =
-            # concat(F, refined_tokens). Project tokens (backbone_dim) and F
-            # (fusion_dim) into head_dim first.
             self.token_proj = nn.Linear(backbone_dim, head_dim)
             self.feat_proj = (
                 nn.Identity() if fusion_dim == head_dim
@@ -395,7 +293,7 @@ class Phase2Model(nn.Module):
                 )
                 for fam in families
             })
-        else:  # linear: Phase-1-style classifier on the pooled fused feature.
+        else:
             self.heads = nn.ModuleDict({
                 fam: nn.Linear(fusion_dim, n_classes[fam])
                 for fam in families
@@ -410,22 +308,22 @@ class Phase2Model(nn.Module):
             fa_ref, fb_ref, refined_tokens = self.bit_fusion(fa, fb)
         else:
             fa_ref, fb_ref = fa, fb
-            refined_tokens = None  # unused: passthrough requires linear heads
+            refined_tokens = None
 
         fa_vec = fa_ref.mean(dim=(2, 3))
         fb_vec = fb_ref.mean(dim=(2, 3))
         v = _enhanced_4way_fusion(fa_vec, fb_vec)
-        feat = self.fusion_mlp(v)                                   # [B, fusion_dim]
+        feat = self.fusion_mlp(v)
 
         if self.head_type == "query2label":
-            feat_q = self.feat_proj(feat).unsqueeze(1)              # [B, 1, head_dim]
-            tokens_q = self.token_proj(refined_tokens)              # [B, 2L, head_dim]
-            memory = torch.cat([feat_q, tokens_q], dim=1)           # [B, 1+2L, head_dim]
+            feat_q = self.feat_proj(feat).unsqueeze(1)
+            tokens_q = self.token_proj(refined_tokens)
+            memory = torch.cat([feat_q, tokens_q], dim=1)
             out: dict[str, Tensor] = {
                 self._FAMILY_KEY[fam]: self.heads[fam](memory)
                 for fam in self.families
             }
-        else:  # linear
+        else:
             out = {
                 self._FAMILY_KEY[fam]: self.heads[fam](feat)
                 for fam in self.families
@@ -434,18 +332,22 @@ class Phase2Model(nn.Module):
         return out
 
     def set_class_priors(self, priors: dict[str, Tensor]) -> None:
-        """Initialize each family head's per-class bias to the empirical prior.
-
-        ``priors[fam]`` is a ``[n_classes_fam]`` tensor of positive rates on
-        the training split. Heads not in ``priors`` are left at zero.
-        """
         for fam, p in priors.items():
             if fam not in self.heads:
                 raise KeyError(f"family {fam!r} not in heads ({list(self.heads)})")
             head = self.heads[fam]
             if self.head_type == "query2label":
                 head.set_class_prior(p)
-            else:  # linear: set the bias directly to logit(prior)
+            else:
                 eps = 1e-3
                 p_clamped = p.clamp(min=eps, max=1.0 - eps)
                 head.bias.data.copy_(torch.log(p_clamped / (1.0 - p_clamped)))
+
+
+def build_model(cfg: dict) -> nn.Module:
+    phase = cfg["experiment"]["phase"]
+    if phase == 1:
+        return Phase1Model(cfg)
+    if phase == 2:
+        return Phase2Model(cfg)
+    raise ValueError(f"experiment.phase must be 1 or 2, got {phase!r}")

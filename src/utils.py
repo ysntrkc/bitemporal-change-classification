@@ -1,5 +1,3 @@
-"""Training utilities: seeding, optimizer (LLRD), scheduler, checkpoint I/O."""
-
 from __future__ import annotations
 
 import logging

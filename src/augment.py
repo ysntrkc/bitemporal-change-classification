@@ -1,10 +1,3 @@
-"""Augmentation pipeline for bitemporal training samples.
-
-Provides ``PairAug`` (per-sample spatial + photometric) and
-``cutmix_pair`` (batch-level pair-wise CutMix). Used for the train
-split only.
-"""
-
 from __future__ import annotations
 
 import logging

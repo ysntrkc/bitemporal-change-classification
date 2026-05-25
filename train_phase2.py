@@ -1,17 +1,3 @@
-"""Training entry point for the Phase-2 unified multi-task model.
-
-Usage:
-    python train_phase2.py --config configs/phase2_unified.yaml --seed 42
-
-Differs from ``train_phase1.py`` in four ways:
-  1. Builds ``Phase2Model`` (BIT fusion + 3x Q2L heads + no-change head).
-  2. Combines four task losses (3x ASL + 1x BCE) via
-     ``UncertaintyWeightedLoss`` with 4 learnable log-sigma parameters.
-  3. Implements real gradient accumulation (Phase-1 used ``grad_accum=1``).
-  4. Tracks per-family val metrics and early-stops on their mean
-     macro-F1; optionally applies the no-change gate during val.
-"""
-
 from __future__ import annotations
 
 import argparse
@@ -27,15 +13,15 @@ from typing import Optional
 import numpy as np
 import torch
 import torch.nn.functional as F
-import yaml
 from torch.utils.tensorboard import SummaryWriter
 
 from src.augment import EvalTransform, PairAug, cutmix_pair
+from src.config import load_config
 from src.dataset import build_dataloaders
 from src.ema import ModelEma
 from src.losses import AsymmetricLoss, FixedWeightLoss, UncertaintyWeightedLoss
 from src.metrics import compute_metrics
-from src.model import Phase2Model
+from src.model import build_model
 from src.utils import build_optimizer, build_scheduler, save_checkpoint, seed_everything
 
 logger = logging.getLogger(__name__)
@@ -43,11 +29,6 @@ logger = logging.getLogger(__name__)
 FAMILY_Y_KEY = {"object": "y_obj", "event": "y_evt", "attribute": "y_attr"}
 FAMILY_LOGITS_KEY = {"object": "logits_obj", "event": "logits_evt", "attribute": "logits_attr"}
 FAMILY_LOSS_KEY = {"object": "obj", "event": "evt", "attribute": "attr"}
-
-
-def load_config(path: str) -> dict:
-    with Path(path).open("r", encoding="utf-8") as f:
-        return yaml.safe_load(f)
 
 
 def _resolve_n_classes(cfg: dict, families: list[str]) -> dict[str, int]:
@@ -276,7 +257,7 @@ def main(argv: Optional[list[str]] = None) -> int:
     shutil.copy(args.config, output_dir / "config_source.yaml")
     writer = SummaryWriter(log_dir=str(output_dir / "tb"))
 
-    model = Phase2Model(cfg).to(device)
+    model = build_model(cfg).to(device)
     mean, std = model.encoder.norm_stats()
     n_trainable = sum(p.numel() for p in model.parameters() if p.requires_grad)
     logger.info("model built: %s trainable params", f"{n_trainable:,}")
