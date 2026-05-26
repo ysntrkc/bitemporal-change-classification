@@ -15,10 +15,12 @@ reports/
 ├── tikz/
 │   └── architecture.tex     Fig. 2 -- TikZ mimari diyagramı (Aşama 1 | Aşama 2)
 ├── tables/
-│   ├── main_results.tex            Tablo I -- Aşama 1 vs Aşama 2 ana sonuçlar (macro-F1)
-│   ├── main_method_extended.tex    Tablo I-genişletilmiş -- yalnız Aşama 2 BIT-only:
-│   │                               macro/micro F1 + macro/micro P + macro/micro R + mAP
-│   └── ablation.tex                Tablo II -- 9 satırlık ablation tablosu
+│   ├── main_results.tex                  Tablo I -- Aşama 1 vs Aşama 2 ana sonuçlar (macro-F1)
+│   ├── main_method_extended.tex          Yalnız Aşama 2 BIT-only canonical:
+│   │                                     macro/micro F1 + P + R + mAP (rapora include edildi)
+│   ├── phase1_canonical_extended.tex     Yalnız Aşama 1 canonical (aile başına tek-görevli):
+│   │                                     aynı 7-sütun ek tablo. main.tex'e Yasin manuel ekleyecek.
+│   └── ablation.tex                      Tablo II -- 9 satırlık ablation tablosu
 ├── figs/
 │   ├── teaser.png                       Fig. 1 -- success + failure örneği
 │   ├── perclass_phase2_object.png       Fig. 3 -- canonical seçim
@@ -38,6 +40,7 @@ reports/
     ├── phase2_table.md                  Aşama 2 mean ± std (aynı 5-sütun, P1 ile delta)
     ├── main_method_extended_table.md    Yalnız Aşama 2 BIT-only:
     │                                    + precision_micro + recall_micro (rapor politikası)
+    ├── phase1_extended_table.md         Aşama 1 canonical aynı 7-sütun ek metrik tablosu
     ├── per_class_metrics.{md,json}      sınıf bazlı F1/P/R/AP/support
     ├── changed_subset_table.md          is_change=1 alt-küme makro-F1
     └── eda_summary.json                 EDA sayıları (28% no-change, 270:1 vb.)

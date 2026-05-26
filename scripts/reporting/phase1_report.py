@@ -13,6 +13,17 @@ RESULTS_DIR = Path("results")
 VOCAB = json.loads(Path("configs/label_vocab.json").read_text())
 
 
+EXTENDED_METRIC_KEYS = [
+    "macro_f1",
+    "micro_f1",
+    "precision_macro",
+    "precision_micro",
+    "recall_macro",
+    "recall_micro",
+    "mAP",
+]
+
+
 def _load_metrics(fam: str, seed: int) -> dict:
     return json.loads(
         (RESULTS_DIR / f"phase1_{fam}" / f"seed{seed}" / "metrics_test_tta.json").read_text()
@@ -63,6 +74,68 @@ def build_table() -> None:
     out = RESULTS_DIR / "phase1_table.md"
     out.write_text("\n".join(lines) + "\n")
     print(f"[2.9] table -> {out}")
+    print()
+    print("\n".join(lines))
+    print()
+
+
+def build_extended_table() -> None:
+    """Macro + micro precision/recall side-by-side for canonical Phase 1.
+
+    Reported only for the canonical per-family setup (TTA + default
+    threshold 0.5, EMA, test split). Macro-F1 remains the headline.
+    """
+    metric_pretty = {
+        "macro_f1": "macro-F1",
+        "micro_f1": "micro-F1",
+        "precision_macro": "P (macro)",
+        "precision_micro": "P (micro)",
+        "recall_macro": "R (macro)",
+        "recall_micro": "R (micro)",
+        "mAP": "mAP",
+    }
+
+    rows: list[dict] = []
+    for fam in FAMILIES:
+        runs = [_load_metrics(fam, s) for s in SEEDS]
+        row: dict = {"family": fam}
+        for k in EXTENDED_METRIC_KEYS:
+            vals = np.array([r[k] for r in runs])
+            row[k] = (float(vals.mean()), float(vals.std(ddof=1)))
+        rows.append(row)
+
+    overall: dict = {"family": "**mean**"}
+    for k in EXTENDED_METRIC_KEYS:
+        means = np.array([r[k][0] for r in rows])
+        overall[k] = (float(means.mean()), float(means.std(ddof=1)))
+    rows.append(overall)
+
+    lines: list[str] = []
+    lines.append("# Phase-1 canonical — extended metrics (main per-family method)")
+    lines.append("")
+    lines.append(
+        "Mean ± std over 3 seeds (42, 1337, 2024). Macro-F1 is the headline "
+        "metric; micro variants and precision/recall are reported here for the "
+        "canonical Phase 1 configuration only (TTA + default threshold 0.5, "
+        "EMA, test split)."
+    )
+    lines.append("")
+    header = "| family    | " + " | ".join(
+        metric_pretty[k] for k in EXTENDED_METRIC_KEYS
+    ) + " |"
+    sep = "|" + "|".join(["---"] + ["---:"] * len(EXTENDED_METRIC_KEYS)) + "|"
+    lines.append(header)
+    lines.append(sep)
+    for row in rows:
+        cells = [row["family"].ljust(9)]
+        for k in EXTENDED_METRIC_KEYS:
+            mu, sd = row[k]
+            cells.append(f"{mu:.4f} ± {sd:.4f}")
+        lines.append("| " + " | ".join(cells) + " |")
+
+    out = RESULTS_DIR / "phase1_extended_table.md"
+    out.write_text("\n".join(lines) + "\n")
+    print(f"[extended-table] -> {out}")
     print()
     print("\n".join(lines))
     print()
@@ -138,6 +211,7 @@ def plot_train_curves() -> None:
 
 def main() -> None:
     build_table()
+    build_extended_table()
     plot_per_class_f1()
     plot_train_curves()
 
