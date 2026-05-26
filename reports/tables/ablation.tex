@@ -11,13 +11,13 @@
     \midrule
     A1: ResNet-50 + ASL (backbone swap)                   & $0{,}265 \pm 0{,}004$ & $0{,}249 \pm 0{,}009$ & $0{,}228 \pm 0{,}004$ & $0{,}247 \pm 0{,}018$ \\
     P1: ConvNeXt-V2 + ASL, TTA yok                        & $0{,}297 \pm 0{,}008$ & $0{,}267 \pm 0{,}016$ & $0{,}250 \pm 0{,}006$ & $0{,}271 \pm 0{,}024$ \\
-    P1: ConvNeXt-V2 + ASL, $+$ TTA (kanonik)              & $0{,}303 \pm 0{,}011$ & $0{,}272 \pm 0{,}014$ & $0{,}258 \pm 0{,}005$ & $\mathbf{0{,}277 \pm 0{,}023}$ \\
+    \textbf{P1: ConvNeXt-V2 + ASL, $+$ TTA (kanonik)}     & $\mathbf{0{,}303 \pm 0{,}011}$ & $\mathbf{0{,}272 \pm 0{,}014}$ & $\mathbf{0{,}258 \pm 0{,}005}$ & $\mathbf{0{,}277 \pm 0{,}023}$ \\
     P1: kanonik, $+$ TTA, $+$ no-change gate              & $0{,}301 \pm 0{,}010$ & $0{,}268 \pm 0{,}012$ & $0{,}256 \pm 0{,}006$ & $0{,}275 \pm 0{,}023$ \\
     P1: DBLoss, default 0{,}5 $+$ TTA (kalibrasyonsuz)    & $0{,}266 \pm 0{,}015$ & --- & --- & --- \\
     P1: DBLoss, tuned threshold $+$ TTA (kalibre)         & $0{,}285 \pm 0{,}008$ & --- & --- & --- \\
     \midrule
-    P2: BIT $+$ linear heads $+$ fixed weights (kanonik)  & $0{,}312 \pm 0{,}010$ & $0{,}280 \pm 0{,}003$ & $0{,}254 \pm 0{,}006$ & $\mathbf{0{,}282 \pm 0{,}029}$ \\
-    P2: BIT yok (passthrough)                             & $0{,}285 \pm 0{,}023$ & $0{,}277 \pm 0{,}007$ & $0{,}259 \pm 0{,}008$ & $0{,}273 \pm 0{,}013$ \\
+    \textbf{P2: BIT $+$ linear heads $+$ fixed weights (kanonik)} & $\mathbf{0{,}312 \pm 0{,}010}$ & $\mathbf{0{,}280 \pm 0{,}003}$ & $0{,}254 \pm 0{,}006$ & $\mathbf{0{,}282 \pm 0{,}029}$ \\
+    P2: BIT yok (passthrough)                             & $0{,}285 \pm 0{,}023$ & $0{,}277 \pm 0{,}007$ & $\mathbf{0{,}259 \pm 0{,}008}$ & $0{,}273 \pm 0{,}013$ \\
     P2: BIT $+$ Q2L heads $+$ UWL (full stack)            & $0{,}173 \pm 0{,}008$ & $0{,}227 \pm 0{,}015$ & $0{,}144 \pm 0{,}004$ & $0{,}181 \pm 0{,}042$ \\
     \bottomrule
   \end{tabular}

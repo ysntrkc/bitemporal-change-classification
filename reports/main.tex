@@ -1,23 +1,8 @@
 \documentclass[conference]{IEEEtran}
 \IEEEoverridecommandlockouts
 
-% XeLaTeX / LuaLaTeX gerektirir; tectonic varsayılan motor olarak XeTeX
-% kullanır. fontspec UTF-8 native -- Turkish glifler için T1 sorunu yok.
-% DejaVu lokal compile (Linux + tectonic) için seçildi. Overleaf'te
-% derliyorsan TeX Gyre Termes (Times benzeri, IEEE standardına yakın)
-% kullanmak isteyebilirsin: \setmainfont{TeX Gyre Termes} vs.
-\usepackage{fontspec}
-% DejaVu yerel (Linux + tectonic) için; Overleaf'te DejaVu yoktur, otomatik
-% olarak TeX Gyre ailesine (Times benzeri, IEEE standardına yakın) düşer.
-\IfFontExistsTF{DejaVu Serif}{%
-  \setmainfont{DejaVu Serif}%
-  \setsansfont{DejaVu Sans}%
-  \setmonofont{DejaVu Sans Mono}%
-}{%
-  \setmainfont{TeX Gyre Termes}%
-  \setsansfont{TeX Gyre Heros}%
-  \setmonofont{TeX Gyre Cursor}%
-}
+% XeLaTeX / LuaLaTeX gerektirir (polyglossia için). Font seçimi yapılmaz;
+% Overleaf varsayılanı (Latin Modern) kullanılır.
 \usepackage{polyglossia}
 \setdefaultlanguage{turkish}
 \setotherlanguage{english}
@@ -59,7 +44,7 @@
   \IEEEauthorblockN{Yasin Tarakçı}
   \IEEEauthorblockA{Yıldız Teknik Üniversitesi\\
     Öğrenci No: 24501130\\
-    BLM5135 -- Derin Öğrenme ve Sinir Ağlarının Temelleri\\
+    BLM5135 -- Derin Öğrenme ve Yapay Sinir Ağları\\
     Bahar 2026}
 }
 
@@ -252,21 +237,48 @@ olay ($+0{,}008$) ailelerinde belirgin iyileşme gözlenirken öznitelik
 ailesinde küçük bir düşüş ($-0{,}004$) yaşanır; BIT'in fayda profili
 ailelere göre farklılaşmakta, tek bir sayıya indirgenememektedir.
 
+\input{tables/phase1_canonical_extended}
+
+Tablo~\ref{tab:phase1-extended} Aşama~1 canonical konfigürasyonu için
+(aile başına tek-görevli model, ASL kaybı, TTA \{orig, hflip, vflip,
+rot180\}, EMA, default eşik) genişletilmiş metrikleri verir. Macro-F1'in
+mikro-F1'in belirgin biçimde altında kalması (nesne için $0{,}303$ vs
+$0{,}702$) macro-F1'i ana metrik olarak seçmemizin gerekçesini
+somutlaştırır: sık görülen birkaç başlığın doğru tahmin edilmesi
+micro ortalamayı yüksek tutarken, uzun kuyruktaki nadir sınıflar
+macro ortalamasını aşağı çeker. Aradaki uçurum olay ve öznitelik
+ailelerinde daha ılımlıdır ($0{,}272$ vs $0{,}430$ ve $0{,}258$ vs
+$0{,}438$), zira buradaki imbalance nesne ailesinin $270{:}1$ oranına
+göre çok daha hafiftir ($28{:}1$ ve $67{:}1$). Macro precision ile
+macro recall karşılaştırmasında nesne ailesinde iki ölçüt birbirine
+çok yakındır ($0{,}313$ vs $0{,}316$); buna karşın olay ve öznitelik
+ailelerinde recall belirgin biçimde precision'ın üzerindedir (olay:
+$0{,}366$ vs $0{,}231$; öznitelik: $0{,}317$ vs $0{,}237$). Tek-görevli
+Aşama~1 modeli bu iki ailede nadir sınıflara gereğinden fazla pozitif
+tahmin atama eğilimindedir.
+
 \input{tables/main_method_extended}
 
-Tablo~\ref{tab:main-extended} ana yöntem için (Aşama~2 BIT-only, TTA +
-no-change gate) genişletilmiş metrikleri verir. Macro-F1 ana metrik
-olarak korunur; micro varyantlar ile precision/recall yalnızca bu
-canonical konfigürasyon için raporlanır. Micro skorlarının macro
-skorlarından belirgin biçimde yüksek olması ($0{,}694$ vs $0{,}312$
-nesne mikro-F1) uzun-kuyruklu etiket dağılımının doğrudan yansımasıdır:
-sık görülen birkaç sınıf doğru tahmin edildiğinde micro yüksek kalırken,
-nadir sınıflardaki F1 düşüklüğü macro ortalamasını aşağı çeker.
-Precision (macro) ile recall (macro) farkı ailelere göre ufak salınımlar
-gösterir; nesne ve olayda recall, precision'a yakın veya bir miktar
-üzerinde, özniteliği'te recall belirgin biçimde yüksektir
-($0{,}318$ vs $0{,}222$) -- modelin nadir özniteliklerde aşırı
-pozitif tahmin etme eğilimini açığa çıkarır.
+Tablo~\ref{tab:main-extended} aynı genişletilmiş çerçeveyi Aşama~2
+BIT-only canonical konfigürasyonu için (TTA + no-change gate) tekrarlar;
+iki tablo birlikte okunduğunda BIT füzyonunun ölçü profilini ailelere
+göre nasıl kaydırdığı görünür hale gelir. Macro-F1 ortalaması yukarı
+kayarken ($0{,}277 \to 0{,}282$), micro-F1 üç ailede de bir miktar
+aşağı düşer (nesne $0{,}702 \to 0{,}694$, olay $0{,}430 \to 0{,}415$,
+öznitelik $0{,}438 \to 0{,}433$): Aşama~2, sık görülen başlıklardaki
+bir miktar mutlak doğruluktan vazgeçip kuyruk taraflarındaki
+kalibrasyona pay aktarmakta, bu da macro öncelikli tasarım tercihimizle
+tutarlı bir dengelemedir. Aile bazında inceleme homojen değildir:
+nesne ailesinde macro precision ve recall birlikte yükselir ($0{,}313
+\to 0{,}332$ ve $0{,}316 \to 0{,}330$); olay ailesinde precision artarken
+recall geriler ($0{,}366 \to 0{,}333$), yani model daha temkinli pozitif
+tahmin eder; öznitelik ailesinde ise macro precision bir miktar düşer
+($0{,}237 \to 0{,}222$). Aşama~1'de öznitelik için belirgin olan
+recall--precision farkı ($0{,}317$ vs $0{,}237$) Aşama~2'de neredeyse
+aynen sürer ($0{,}318$ vs $0{,}222$); BIT füzyonu bu sistematik
+aşırı-pozitif eğilimi düzeltmemiş, nadir özniteliklere fazla pozitif
+atama multi-task aşaması altında da paylaşılan bir hata kalıbı olarak
+kalmıştır.
 
 Ortalama puan kazanımının ötesinde, BIT'in pratik açıdan en görünür
 katkısı \emph{seed başına standart sapmadaki düşüştür}. Tablo~\ref{tab:ablation}'deki
