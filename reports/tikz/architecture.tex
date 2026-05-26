@@ -11,19 +11,19 @@
       {GAP $+$ four-way fusion\\$[f_A;\,f_B;\,|f_A{-}f_B|;\,f_A\odot f_B]$};
     \node[fuse, below=of p1fuse] (p1mlp)
       {Linear $\to$ LN $\to$ GELU\\(width 512)};
-    \node[head, below left =6mm and 2mm of p1mlp] (p1head)
+    \node[head, below left =4mm and 2mm of p1mlp] (p1head)
       {family head\\Linear($C_{\!f}$)};
-    \node[head, below right=6mm and 2mm of p1mlp] (p1nc)
+    \node[head, below right=4mm and 2mm of p1mlp] (p1nc)
       {nochg head\\Linear(1)};
-    \node[loss, below=10mm of p1mlp] (p1loss)
+    \node[loss, below=15mm of p1mlp] (p1loss)
       {ASL $\,+\,0{,}2\cdot$ BCE};
 
     \draw[arr] (p1A) -- (p1enc);
     \draw[arr] (p1B) -- (p1enc);
     \draw[arr] (p1enc) -- (p1fuse) node[label] {$f_A,f_B$};
     \draw[arr] (p1fuse) -- (p1mlp);
-    \draw[arr] (p1mlp.south) |- (p1head.east);
-    \draw[arr] (p1mlp.south) |- (p1nc.west);
+    \draw[arr] (p1mlp.south) -- (p1head.east);
+    \draw[arr] (p1mlp.south) -- (p1nc.west);
     \draw[arr, dashed] (p1head.south) |- (p1loss.west);
     \draw[arr, dashed] (p1nc.south)   |- (p1loss.east);
 
