@@ -20,10 +20,21 @@ def _load_metrics(seed: int) -> dict:
     )
 
 
+SHORT_METRIC_KEYS = ["macro_f1", "micro_f1", "precision_macro", "recall_macro", "mAP"]
+EXTENDED_METRIC_KEYS = [
+    "macro_f1",
+    "micro_f1",
+    "precision_macro",
+    "precision_micro",
+    "recall_macro",
+    "recall_micro",
+    "mAP",
+]
+
+
 def _load_phase1_table() -> dict[str, dict[str, tuple[float, float]]]:
     text = (RESULTS_DIR / "phase1_table.md").read_text().splitlines()
     result: dict[str, dict[str, tuple[float, float]]] = {}
-    metric_keys = ["macro_f1", "micro_f1", "precision_macro", "recall_macro", "mAP"]
     for line in text:
         if not line.startswith("|") or "---" in line or "family" in line:
             continue
@@ -32,7 +43,7 @@ def _load_phase1_table() -> dict[str, dict[str, tuple[float, float]]]:
         if fam not in (*FAMILIES, "mean"):
             continue
         vals: dict[str, tuple[float, float]] = {}
-        for k, c in zip(metric_keys, cells[1:]):
+        for k, c in zip(SHORT_METRIC_KEYS, cells[1:]):
             mu_str, sd_str = c.split("±")
             vals[k] = (float(mu_str), float(sd_str))
         result[fam] = vals
@@ -40,7 +51,7 @@ def _load_phase1_table() -> dict[str, dict[str, tuple[float, float]]]:
 
 
 def build_table() -> None:
-    metric_keys = ["macro_f1", "micro_f1", "precision_macro", "recall_macro", "mAP"]
+    metric_keys = SHORT_METRIC_KEYS
     metric_pretty = {
         "macro_f1": "macro-F1",
         "micro_f1": "micro-F1",
@@ -105,6 +116,68 @@ def build_table() -> None:
     out = RESULTS_DIR / "phase2_table.md"
     out.write_text("\n".join(lines) + "\n")
     print(f"[table] -> {out}")
+    print()
+    print("\n".join(lines))
+    print()
+
+
+def build_extended_table() -> None:
+    """Macro + micro precision/recall side-by-side for the main method only.
+
+    Reported only for canonical Phase 2 (BIT-only, TTA + no-change gate).
+    Macro-F1 remains the headline metric; this table accompanies it.
+    """
+    metric_pretty = {
+        "macro_f1": "macro-F1",
+        "micro_f1": "micro-F1",
+        "precision_macro": "P (macro)",
+        "precision_micro": "P (micro)",
+        "recall_macro": "R (macro)",
+        "recall_micro": "R (micro)",
+        "mAP": "mAP",
+    }
+
+    rows: list[dict] = []
+    for fam in FAMILIES:
+        runs = [_load_metrics(s)[fam] for s in SEEDS]
+        row: dict = {"family": fam}
+        for k in EXTENDED_METRIC_KEYS:
+            vals = np.array([r[k] for r in runs])
+            row[k] = (float(vals.mean()), float(vals.std(ddof=1)))
+        rows.append(row)
+
+    overall: dict = {"family": "**mean**"}
+    for k in EXTENDED_METRIC_KEYS:
+        means = np.array([r[k][0] for r in rows])
+        overall[k] = (float(means.mean()), float(means.std(ddof=1)))
+    rows.append(overall)
+
+    lines: list[str] = []
+    lines.append("# Phase-2 BIT-only — extended metrics (main method only)")
+    lines.append("")
+    lines.append(
+        "Mean ± std over 3 seeds (42, 1337, 2024). Macro-F1 is the headline "
+        "metric; micro variants and precision/recall are reported here for the "
+        "canonical Phase 2 configuration only (TTA + no-change gate, EMA, "
+        "test split)."
+    )
+    lines.append("")
+    header = "| family    | " + " | ".join(
+        metric_pretty[k] for k in EXTENDED_METRIC_KEYS
+    ) + " |"
+    sep = "|" + "|".join(["---"] + ["---:"] * len(EXTENDED_METRIC_KEYS)) + "|"
+    lines.append(header)
+    lines.append(sep)
+    for row in rows:
+        cells = [row["family"].ljust(9)]
+        for k in EXTENDED_METRIC_KEYS:
+            mu, sd = row[k]
+            cells.append(f"{mu:.4f} ± {sd:.4f}")
+        lines.append("| " + " | ".join(cells) + " |")
+
+    out = RESULTS_DIR / "phase2_extended_table.md"
+    out.write_text("\n".join(lines) + "\n")
+    print(f"[extended-table] -> {out}")
     print()
     print("\n".join(lines))
     print()
@@ -183,6 +256,7 @@ def plot_train_curves() -> None:
 
 def main() -> None:
     build_table()
+    build_extended_table()
     plot_per_class_f1()
     plot_train_curves()
 

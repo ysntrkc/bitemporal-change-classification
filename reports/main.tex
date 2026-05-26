@@ -7,15 +7,22 @@
 % derliyorsan TeX Gyre Termes (Times benzeri, IEEE standardına yakın)
 % kullanmak isteyebilirsin: \setmainfont{TeX Gyre Termes} vs.
 \usepackage{fontspec}
-\setmainfont{DejaVu Serif}
-\setsansfont{DejaVu Sans}
-\setmonofont{DejaVu Sans Mono}
+% DejaVu yerel (Linux + tectonic) için; Overleaf'te DejaVu yoktur, otomatik
+% olarak TeX Gyre ailesine (Times benzeri, IEEE standardına yakın) düşer.
+\IfFontExistsTF{DejaVu Serif}{%
+  \setmainfont{DejaVu Serif}%
+  \setsansfont{DejaVu Sans}%
+  \setmonofont{DejaVu Sans Mono}%
+}{%
+  \setmainfont{TeX Gyre Termes}%
+  \setsansfont{TeX Gyre Heros}%
+  \setmonofont{TeX Gyre Cursor}%
+}
 \usepackage{polyglossia}
 \setdefaultlanguage{turkish}
 \setotherlanguage{english}
 \usepackage{cite}
 \usepackage{amsmath,amssymb,amsfonts}
-\usepackage{algorithmic}
 \usepackage{graphicx}
 \usepackage{booktabs}
 \usepackage{textcomp}
@@ -49,8 +56,9 @@
   Uzun-Kuyruklu Nesne, Olay ve Öznitelik Başlıkları}
 
 \author{
-  \IEEEauthorblockN{Yasin TODO\_SOYISIM}
+  \IEEEauthorblockN{Yasin Tarakçı}
   \IEEEauthorblockA{Yıldız Teknik Üniversitesi\\
+    Öğrenci No: 24501130\\
     BLM5135 -- Derin Öğrenme ve Sinir Ağlarının Temelleri\\
     Bahar 2026}
 }
@@ -95,6 +103,26 @@ transformer, bitemporal imagery.
     birlikte gösterilmiştir.}
   \label{fig:teaser}
 \end{figure}
+
+Bitemporal change classification, aynı coğrafi konumun iki farklı
+zamana ait havadan görüntülerinin ($A$, $B$) verildiği durumda,
+sahnedeki değişimi piksel düzeyinde bir maske olarak değil semantik
+bir etiket kümesi olarak betimlemeyi hedefler. Bu kurulum, klasik
+change detection'ın ``nerede değişti?'' sorusunu, ``ne, nasıl ve
+hangi nesne üzerinde değişti?'' sorularıyla genişletir; afet hasar
+tespiti, kentsel gelişim izleme ve arazi kullanımı analizi gibi
+uygulamalarda yorumlanabilir bir çıktı sağlar. Çalıştığımız veri
+kümesi bu zenginliği üç tamamlayıcı etiket ailesi üzerinden yakalar:
+\emph{nesne} (sahnedeki fiziksel sınıf; örn.\ \texttt{building},
+\texttt{tree}, \texttt{road}), \emph{olay} (değişimin yapısı; örn.\
+\texttt{build}, \texttt{remove}, \texttt{increase}) ve
+\emph{öznitelik} (görsel/anlamsal nitelik; örn.\ \texttt{blue},
+\texttt{large}, \texttt{empty}). Üç aile semantik olarak kısmen
+örtüşse de ground-truth açısından bağımsız etiketlenir: aynı çift hem
+nesne ailesinde \texttt{tree}, hem olay ailesinde \texttt{increase},
+hem öznitelik ailesinde \texttt{blue} gibi eş zamanlı pozitiflere
+sahip olabilir. Bu da problemi doğal olarak çok etiketli kılar ve
+aileler arası bağımsızlığa saygılı bir modelleme tercihi gerektirir.
 
 Bitemporal change detection, klasik değişim haritalama yaklaşımlarına
 göre multi-label ayrıştırma ile daha güçlü bir denetim sinyali sağlar;
@@ -215,28 +243,109 @@ multiplicative no-change gate uygular.
 \subsection{Ana sonuçlar}
 \input{tables/main_results}
 
-% Phase 1 vs Phase 2 yorum: BIT küçük bir ortalama kazanım sağlar ama
-% asıl etkisi cross-seed std'nin yarıya inmesidir.
+Tablo~\ref{tab:main}'de Aşama~1 ve Aşama~2'nin test kümesindeki
+performansı yan yana verilmiştir. Üç seed üzerinde ortalama macro-F1,
+Aşama~1 için $0{,}277 \pm 0{,}023$, Aşama~2 için $0{,}282 \pm 0{,}029$'a
+ulaşır; BIT füzyonunun toplam macro-F1 üzerindeki etkisi mütevazıdır
+($+0{,}005$ puan). Aile bazında bakıldığında nesne ($+0{,}009$) ve
+olay ($+0{,}008$) ailelerinde belirgin iyileşme gözlenirken öznitelik
+ailesinde küçük bir düşüş ($-0{,}004$) yaşanır; BIT'in fayda profili
+ailelere göre farklılaşmakta, tek bir sayıya indirgenememektedir.
+
+\input{tables/main_method_extended}
+
+Tablo~\ref{tab:main-extended} ana yöntem için (Aşama~2 BIT-only, TTA +
+no-change gate) genişletilmiş metrikleri verir. Macro-F1 ana metrik
+olarak korunur; micro varyantlar ile precision/recall yalnızca bu
+canonical konfigürasyon için raporlanır. Micro skorlarının macro
+skorlarından belirgin biçimde yüksek olması ($0{,}694$ vs $0{,}312$
+nesne mikro-F1) uzun-kuyruklu etiket dağılımının doğrudan yansımasıdır:
+sık görülen birkaç sınıf doğru tahmin edildiğinde micro yüksek kalırken,
+nadir sınıflardaki F1 düşüklüğü macro ortalamasını aşağı çeker.
+Precision (macro) ile recall (macro) farkı ailelere göre ufak salınımlar
+gösterir; nesne ve olayda recall, precision'a yakın veya bir miktar
+üzerinde, özniteliği'te recall belirgin biçimde yüksektir
+($0{,}318$ vs $0{,}222$) -- modelin nadir özniteliklerde aşırı
+pozitif tahmin etme eğilimini açığa çıkarır.
+
+Ortalama puan kazanımının ötesinde, BIT'in pratik açıdan en görünür
+katkısı \emph{seed başına standart sapmadaki düşüştür}. Tablo~\ref{tab:ablation}'deki
+aynı backbone'a sahip ``BIT yok'' passthrough varyantı ile
+karşılaştırıldığında, en zorlu nesne ailesinde seed başına std
+$0{,}023$'ten $0{,}010$'a iner -- yaklaşık yarıya. Olay ailesinde de
+$0{,}007$'den $0{,}003$'e benzer bir düşüş gözlenir. Bu, tek seferlik
+bir değer bildirmesi gereken senaryolarda tahmin tekrarlanabilirliğini
+güçlendiren, mütevazı ortalama kazancın yanına eklenen pratik bir
+katkıdır.
 
 \subsection{Ablation analizi}
 \input{tables/ablation}
 
-% Hikaye:
-% (1) A1 -> P1 canonical: ConvNeXt-V2 backbone seçimi +0.030 katkı yapar.
-% (2) +TTA: tutarlı ama küçük (+0.006).
-% (3) +gate: null sonuç (-0.003).
-% (4) DBLoss: 0.5'te kalibrasyonsuz, tuned thr ile toparlar ama ASL'yi
-%     geçemez.
-% (5) P1 -> P2 canonical: BIT +0.005 mean katkı, std yarıya iner.
-% (6) Full stack: 50 epoch cap'inde bile canonical'in altında.
+Tablo~\ref{tab:ablation} altı eksende kontrollü kıyaslamalar sunar.
+(i)~\textbf{Backbone seçimi en büyük tek katkıyı sağlar}: aynı eğitim
+tarifi altında ResNet-50'den ConvNeXt-V2'ye geçildiğinde ortalama
+macro-F1 $0{,}247$'den $0{,}277$'ye yükselir ($+0{,}030$). FCMAE
+ön-eğitimli modern backbone'un üst sınırı belirgin biçimde yukarı
+çektiği açıktır. (ii)~\textbf{TTA} tutarlı fakat küçük bir kazanç
+verir: TTA yok $\to$ \{orig, hflip, vflip, rot180\} ortalaması,
+ortalama macro-F1'i $0{,}271$'den $0{,}277$'ye taşır ($+0{,}006$).
+(iii)~Inference sırasında multiplicative \textbf{no-change gate}
+eklemenin etkisi pratikte sıfırdır ($-0{,}002$); değişimsiz çift oranı
+veri kümesinde \%28 düzeyinde olsa da head'lerin sigmoid çıktıları
+zaten görece düşük sınıf olasılıkları üretmekte, gate ayrı bir kazanç
+sağlayamamaktadır.
+
+(iv)~Long-tail nesne ailesinde \textbf{DBLoss}, default $0{,}5$
+eşiğinde ASL'nin altında kalır ($0{,}266$ vs.\ $0{,}303$); ancak
+per-class threshold tuning ile $0{,}285$'e çıkar. Bu, DBLoss'un kayıp
+manzarasının ASL'ninkinden farklı bir karar sınırı ürettiğini ve
+$0{,}5$'in tüm sınıflar için kalibre olmadığını gösterir -- buna
+rağmen tuned eşikli DBLoss bile ASL'yi geçemez. (v)~\textbf{BIT
+füzyonu}, aynı backbone üzerinde passthrough fusion'a (``BIT yok''
+satırı) kıyasla ortalama macro-F1'i $0{,}273$'ten $0{,}282$'ye taşır
+($+0{,}009$); ve daha önemlisi, en zorlu nesne ailesinde seed başına
+std'yi $0{,}023$'ten $0{,}010$'a düşürür. (vi)~Aşama~2'nin üzerine
+Query2Label heads ve uncertainty-weighted loss ekleyen
+\textbf{full-stack} varyantı, $0{,}181 \pm 0{,}042$ ile kanonik
+konfigürasyonun belirgin biçimde altında kalır; bu varyant 50 epoch
+cap'inde hâlâ yükselmekteydi (\emph{early-stop cap notu}), dolayısıyla
+nihai sayı tam yakınsamayı yansıtmıyor olsa da bu veri ölçeğinde Q2L
+ve UWL'nin getirdiği parametre maliyetinin amortise edilemediği açıktır.
 
 \subsection{Sınıf bazlı davranış ve nitel örnekler}
+
+Şekil~\ref{fig:perclass}'da nesne ailesinin sınıf bazlı F1 değerleri
+keskin bir azalan eğri çizer: en sık görülen üst sınıflar
+(\texttt{building}, \texttt{tree}, \texttt{road}) makul F1 seviyelerine
+ulaşırken kuyruk sınıflar (\texttt{plant}, \texttt{green}, \texttt{asphalt})
+tutarlı biçimde sıfıra yakın puan alır. Macro-F1'in $0{,}30$ civarında
+kalmasının başlıca nedeni budur: ortalama, kuyruk tarafından aşağı
+çekilmektedir. Per-class threshold tuning bu profili kısmen düzeltir
+ancak az pozitif örnekli sınıflarda recall'u kayda değer ölçüde
+artıramaz; çözüm yönü thresholding değil, daha güçlü öz-denetimli
+ön-eğitim veya kuyruk-bilinçli sampling tarafına geçmek gibi
+görünmektedir.
+
+Şekil~\ref{fig:curves} kanonik Aşama~2 modelinin eğitim dinamiğini
+özetler: eğitim kaybı düzgün biçimde azalır, doğrulama kaybı yaklaşık
+30. epoch'tan sonra plato yapar; doğrulama macro-F1 eğrilerindeki
+$\pm 1$ standart sapma bandı BIT füzyonu altında daralır -- bu, ana
+sonuçlar bölümünde tartışılan seed başına std düşüşünün eğitim
+boyunca da gözlemlenebildiğini gösterir. Şekil~\ref{fig:qual}'daki
+nitel örnekler bu davranışla tutarlıdır: başarı örnekleri (üst iki
+satır) tipik olarak sık görülen büyük-ölçekli sahne değişimlerini
+(bina, ağaç, \texttt{increase}) içerirken hata örnekleri (alt iki
+satır) ya kuyruk sınıfa düşmüş etiketleri (\texttt{field},
+\texttt{turn}) ya da tüm ailelerde eşiğin altında kalan eşik-altı
+tahminleri barındırır. Bu, hatanın tek bir noktaya değil, uzun
+kuyruğun karşılık geldiği görece nadir sahne kompozisyonlarına
+yayıldığına işaret eder.
 
 \begin{figure}[t]
   \centering
   \includegraphics[width=\linewidth]{perclass_phase2_object.png}
   \caption{Aşama~2 nesne ailesinde test kümesi sınıf-bazlı F1
-    değerleri, üç tohum ortalamasına göre azalan sıralanmış. Hata
+    değerleri, üç seed ortalamasına göre azalan sıralanmış. Hata
     barları $\pm 1$ standart sapmayı gösterir. Grafik altındaki seyrek
     sınıflar tutarlı biçimde düşük puan alır; makro-F1 düşüşünün büyük
     bölümü uzun kuyruktan kaynaklanır.}
@@ -246,7 +355,7 @@ multiplicative no-change gate uygular.
 \begin{figure}[t]
   \centering
   \includegraphics[width=\linewidth]{curves_phase2.png}
-  \caption{Aşama~2 kanonik modelin üç tohum üzerindeki eğitim
+  \caption{Aşama~2 kanonik modelin üç seed üzerindeki eğitim
     dinamiği: eğitim kaybı, doğrulama kaybı ve aile-bazlı doğrulama
     makro-F1 değerleri (eğriler) ile ortalamaları (kalın çizgi).
     Gölgeli bantlar $\pm 1$ standart sapmadır.}
@@ -256,7 +365,7 @@ multiplicative no-change gate uygular.
 \begin{figure}[t]
   \centering
   \includegraphics[width=\linewidth]{qualitative.png}
-  \caption{Aşama~2 kanonik modelden (tohum 42) test kümesinde nitel
+  \caption{Aşama~2 kanonik modelden (seed 42) test kümesinde nitel
     örnekler. Üst iki satır en yüksek F1 alan başarı örnekleri, alt
     iki satır ise en az bir pozitif etiket içerip en düşük F1 alan
     hata örnekleridir. Her satırda $A$, $B$, gerçek etiketler ve

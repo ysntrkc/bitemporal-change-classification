@@ -15,8 +15,10 @@ reports/
 ├── tikz/
 │   └── architecture.tex     Fig. 2 -- TikZ mimari diyagramı (Aşama 1 | Aşama 2)
 ├── tables/
-│   ├── main_results.tex     Tablo I -- Aşama 1 vs Aşama 2 ana sonuçlar
-│   └── ablation.tex         Tablo II -- 9 satırlık ablation tablosu
+│   ├── main_results.tex            Tablo I -- Aşama 1 vs Aşama 2 ana sonuçlar (macro-F1)
+│   ├── main_method_extended.tex    Tablo I-genişletilmiş -- yalnız Aşama 2 BIT-only:
+│   │                               macro/micro F1 + macro/micro P + macro/micro R + mAP
+│   └── ablation.tex                Tablo II -- 9 satırlık ablation tablosu
 ├── figs/
 │   ├── teaser.png                       Fig. 1 -- success + failure örneği
 │   ├── perclass_phase2_object.png       Fig. 3 -- canonical seçim
@@ -31,12 +33,14 @@ reports/
 │   ├── split_dist.png                      train/val/test dağılımı + no-change oranı
 │   └── positives_per_sample.png            ortalama pozitif sayısı
 └── data/                    Raw markdown + JSON referansları (rapora gömme)
-    ├── ablation_table.md           9-row tablo, ablation.tex kaynak verisi
-    ├── phase1_table.md             Aşama 1 mean ± std
-    ├── phase2_table.md             Aşama 2 mean ± std
-    ├── per_class_metrics.{md,json} sınıf bazlı F1/P/R/AP/support
-    ├── changed_subset_table.md     is_change=1 alt-küme makro-F1
-    └── eda_summary.json            EDA sayıları (28% no-change, 270:1 vb.)
+    ├── ablation_table.md                9-row tablo, ablation.tex kaynak verisi
+    ├── phase1_table.md                  Aşama 1 mean ± std (macro/micro F1, P/R macro, mAP)
+    ├── phase2_table.md                  Aşama 2 mean ± std (aynı 5-sütun, P1 ile delta)
+    ├── main_method_extended_table.md    Yalnız Aşama 2 BIT-only:
+    │                                    + precision_micro + recall_micro (rapor politikası)
+    ├── per_class_metrics.{md,json}      sınıf bazlı F1/P/R/AP/support
+    ├── changed_subset_table.md          is_change=1 alt-küme makro-F1
+    └── eda_summary.json                 EDA sayıları (28% no-change, 270:1 vb.)
 ```
 
 ## Compile
@@ -125,6 +129,20 @@ yazılacağını gösterir.
 
 Alternatif: Fig 3'te Aşama 1 muadili (figs/perclass_phase1_*.png) ya da
 Fig 4'te Aşama 1 eğrileri (figs/curves_phase1_*.png) tercih edilebilir.
+
+## Raporlama politikası: metrik kapsamı
+
+- **Ana metrik: macro-F1** (uzun-kuyruklu multi-label için doğru ana
+  sayı). Tablo~I (`main_results.tex`) ve Tablo~II (`ablation.tex`)
+  yalnız macro-F1 raporlar.
+- **Ek metrikler (sadece ana yöntem için)**: Aşama~2 BIT-only canonical
+  konfigürasyonu için `main_method_extended.tex` ek tablosu macro-F1,
+  micro-F1, P (macro), P (micro), R (macro), R (micro), mAP'i yan yana
+  verir. Bu uzun set ablation satırlarında raporlanmaz; tablo kalabalığı
+  yaratmamak ve macro-F1'in tek ana sayı olarak kalmasını korumak için.
+- `phase1_table.md` ve `phase2_table.md` aile ve ortalama bazında 5
+  sütun içerir (macro-F1, micro-F1, P macro, R macro, mAP) -- bunlar
+  rapor tabloları için kaynak verisidir; rapora doğrudan girmez.
 
 ## Önemli noktalar / dikkat
 

@@ -27,9 +27,9 @@
     \draw[arr, dashed] (p1head.south) |- (p1loss.west);
     \draw[arr, dashed] (p1nc.south)   |- (p1loss.east);
 
-    \node[font=\bfseries\small, above=2mm of p1A,
-      xshift=10mm, anchor=south]
-      {Aşama~1: aile başına tek-görevli (3 model)};
+    \node[font=\bfseries\footnotesize, anchor=south, align=center]
+      at ($(p1A.north)!0.5!(p1B.north)+(0,3mm)$)
+      {Aşama~1: aile başına\\tek-görevli (3 model)};
 
     % ---------- Phase 2 (right column) ----------
     \node[io, right=42mm of p1B] (p2A) {$A$};
@@ -61,9 +61,9 @@
     \draw[arr, dashed] (p2attr.south) -- ($(p2loss.north)+(6mm,0)$);
     \draw[arr, dashed] (p2nc.south)   |- (p2loss.east);
 
-    \node[font=\bfseries\small, above=2mm of p2A,
-      xshift=10mm, anchor=south]
-      {Aşama~2: birleşik çok-görevli (1 model)};
+    \node[font=\bfseries\footnotesize, anchor=south, align=center]
+      at ($(p2A.north)!0.5!(p2B.north)+(0,3mm)$)
+      {Aşama~2: birleşik\\çok-görevli (1 model)};
 
     \node[font=\scriptsize, below=2mm of p2loss, align=center]
       {Inference gate: $p_{\text{fam}} \leftarrow p_{\text{fam}} \cdot
