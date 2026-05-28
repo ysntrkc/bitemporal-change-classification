@@ -61,12 +61,13 @@ Aynı ConvNeXt-V2 Tiny Siamese backbone altında iki model ailesi
 eğitiyoruz: (i) four-way fusion (birleştirme, mutlak fark, Hadamard
 çarpımı) ve Asymmetric Loss (ASL) ile çalışan, aileye özel üç
 tek-görevli Aşama~1 modeli; (ii) aynı backbone'a Bitemporal Image
-Transformer (BIT) füzyonu ve sabit ağırlıklı çok-görevli (multi-task)
-başlık ekleyen Aşama~2 birleşik modeli. Aşama~1 üç seed üzerinde 0{,}277
-macro-F1 ortalamasına, Aşama~2 ise 0{,}282'ye ulaşıyor; BIT hem küçük bir
+Transformer (BIT) füzyonu uygulayan ve sabit ağırlıklı çok-görevli
+(multi-task) kayıpla eğitilen Aşama~2 birleşik modeli. Aşama~1 üç seed üzerinde 0{,}277
+macro-F1 ortalamasına, Aşama~2 ise 0{,}283'e ulaşıyor; BIT hem küçük bir
 ortalama kazanım hem de seed'ler arası varyansta belirgin düşüş
-sağlıyor. Çalışmayan denemeleri de (no-change gate, Query2Label
-başlıkları, uncertainty-weighted loss) negatif sonuç olarak raporluyoruz.
+sağlıyor. Etkisi marjinal kalan no-change gate'i ve geri tepen
+Query2Label başlıkları ile uncertainty-weighted loss denemelerini
+negatif sonuç olarak dürüstçe raporluyoruz.
 \end{abstract}
 
 \begin{IEEEkeywords}
@@ -182,9 +183,11 @@ no-change head'e ayrılır. Tüm task loss'ları fixed weight ile ($\{1, 1,
 heads~\cite{liu2021q2l} ve uncertainty-weighted loss~\cite{kendall2018uwl}
 kullanılabilen üç eksen konfigüre edilebilir (fusion
 $\in\{$BIT, passthrough$\}$, heads $\in\{$linear, Q2L$\}$, aggregation
-$\in\{$fixed, uncertainty$\}$). Inference sırasında multiplicative
-no-change gate uygulanır: $p^{\text{gated}}_{\text{fam}} =
-p_{\text{fam}} \cdot \sigma(\ell_{\text{nochg}})$.
+$\in\{$fixed, uncertainty$\}$). Inference sırasında opsiyonel
+(ablation amaçlı) multiplicative no-change gate tanımlanır:
+$p^{\text{gated}}_{\text{fam}} = p_{\text{fam}} \cdot
+\sigma(\ell_{\text{nochg}})$; kanonik konfigürasyonda gate kapalıdır
+(bkz.\ Tablo~\ref{tab:ablation}).
 
 \input{tikz/architecture}
 
@@ -218,8 +221,7 @@ Birincil metrik macro-F1; yanında micro-F1, macro precision/recall ve
 mean average precision (mAP) raporlanır. Varsayılan threshold
 $0{,}5$'tir; bir satır açıkça val split üzerinde per-class threshold
 tuning yaptığını belirtir. Test-time augmentation (TTA), \{orig, hflip,
-vflip, rot180\} olasılıklarını ortalar. Aşama~2 inference sırasında
-multiplicative no-change gate uygular.
+vflip, rot180\} olasılıklarını ortalar.
 
 % =====================================================================
 \section{Sonuçlar}
@@ -230,16 +232,16 @@ multiplicative no-change gate uygular.
 
 Tablo~\ref{tab:main}'de Aşama~1 ve Aşama~2'nin test kümesindeki
 performansı yan yana verilmiştir. Üç seed üzerinde ortalama macro-F1,
-Aşama~1 için $0{,}277 \pm 0{,}023$, Aşama~2 için $0{,}282 \pm 0{,}029$'a
+Aşama~1 için $0{,}277 \pm 0{,}023$, Aşama~2 için $0{,}283 \pm 0{,}029$'a
 ulaşır; BIT füzyonunun toplam macro-F1 üzerindeki etkisi mütevazıdır
-($+0{,}005$ puan). Aile bazında bakıldığında nesne ($+0{,}009$) ve
-olay ($+0{,}008$) ailelerinde belirgin iyileşme gözlenirken öznitelik
-ailesinde küçük bir düşüş ($-0{,}004$) yaşanır; BIT'in fayda profili
+($+0{,}006$ puan). Aile bazında bakıldığında nesne ($+0{,}010$) ve
+olay ($+0{,}009$) ailelerinde belirgin iyileşme gözlenirken öznitelik
+ailesinde küçük bir düşüş ($-0{,}003$) yaşanır; BIT'in fayda profili
 ailelere göre farklılaşmakta, tek bir sayıya indirgenememektedir.
 
 \input{tables/phase1_canonical_extended}
 
-Tablo~\ref{tab:phase1-extended} Aşama~1 canonical konfigürasyonu için
+Tablo~\ref{tab:phase1-extended} Aşama~1 kanonik konfigürasyonu için
 (aile başına tek-görevli model, ASL kaybı, TTA \{orig, hflip, vflip,
 rot180\}, EMA, default eşik) genişletilmiş metrikleri verir. Macro-F1'in
 mikro-F1'in belirgin biçimde altında kalması (nesne için $0{,}303$ vs
@@ -260,31 +262,31 @@ tahmin atama eğilimindedir.
 \input{tables/main_method_extended}
 
 Tablo~\ref{tab:main-extended} aynı genişletilmiş çerçeveyi Aşama~2
-BIT-only canonical konfigürasyonu için (TTA + no-change gate) tekrarlar;
-iki tablo birlikte okunduğunda BIT füzyonunun ölçü profilini ailelere
-göre nasıl kaydırdığı görünür hale gelir. Macro-F1 ortalaması yukarı
-kayarken ($0{,}277 \to 0{,}282$), micro-F1 üç ailede de bir miktar
-aşağı düşer (nesne $0{,}702 \to 0{,}694$, olay $0{,}430 \to 0{,}415$,
-öznitelik $0{,}438 \to 0{,}433$): Aşama~2, sık görülen başlıklardaki
-bir miktar mutlak doğruluktan vazgeçip kuyruk taraflarındaki
-kalibrasyona pay aktarmakta, bu da macro öncelikli tasarım tercihimizle
-tutarlı bir dengelemedir. Aile bazında inceleme homojen değildir:
-nesne ailesinde macro precision ve recall birlikte yükselir ($0{,}313
-\to 0{,}332$ ve $0{,}316 \to 0{,}330$); olay ailesinde precision artarken
-recall geriler ($0{,}366 \to 0{,}333$), yani model daha temkinli pozitif
-tahmin eder; öznitelik ailesinde ise macro precision bir miktar düşer
-($0{,}237 \to 0{,}222$). Aşama~1'de öznitelik için belirgin olan
-recall--precision farkı ($0{,}317$ vs $0{,}237$) Aşama~2'de neredeyse
-aynen sürer ($0{,}318$ vs $0{,}222$); BIT füzyonu bu sistematik
-aşırı-pozitif eğilimi düzeltmemiş, nadir özniteliklere fazla pozitif
-atama multi-task aşaması altında da paylaşılan bir hata kalıbı olarak
-kalmıştır.
+BIT-only kanonik konfigürasyonu için (TTA) tekrarlar; iki tablo
+birlikte okunduğunda BIT füzyonunun ölçü
+profilini ailelere göre nasıl kaydırdığı görünür hale gelir. Macro-F1
+ortalaması yukarı kayarken ($0{,}277 \to 0{,}283$), micro-F1 üç ailede
+de bir miktar aşağı düşer (nesne $0{,}702 \to 0{,}696$, olay
+$0{,}430 \to 0{,}419$, öznitelik $0{,}438 \to 0{,}433$): Aşama~2, sık
+görülen başlıklardaki bir miktar mutlak doğruluktan vazgeçip kuyruk
+taraflarındaki kalibrasyona pay aktarmakta, bu da macro öncelikli
+tasarım tercihimizle tutarlı bir dengelemedir. Aile bazında inceleme
+homojen değildir: nesne ailesinde macro precision ve recall birlikte
+yükselir ($0{,}313 \to 0{,}330$ ve $0{,}316 \to 0{,}336$); olay
+ailesinde precision artarken recall geriler ($0{,}366 \to 0{,}339$),
+yani model daha temkinli pozitif tahmin eder; öznitelik ailesinde ise
+macro precision bir miktar düşer ($0{,}237 \to 0{,}222$). Aşama~1'de
+öznitelik için belirgin olan recall--precision farkı ($0{,}317$ vs
+$0{,}237$) Aşama~2'de neredeyse aynen sürer ($0{,}324$ vs $0{,}222$);
+BIT füzyonu bu sistematik aşırı-pozitif eğilimi düzeltmemiş, nadir
+özniteliklere fazla pozitif atama multi-task aşaması altında da
+paylaşılan bir hata kalıbı olarak kalmıştır.
 
 Ortalama puan kazanımının ötesinde, BIT'in pratik açıdan en görünür
 katkısı \emph{seed başına standart sapmadaki düşüştür}. Tablo~\ref{tab:ablation}'deki
 aynı backbone'a sahip ``BIT yok'' passthrough varyantı ile
 karşılaştırıldığında, en zorlu nesne ailesinde seed başına std
-$0{,}023$'ten $0{,}010$'a iner -- yaklaşık yarıya. Olay ailesinde de
+$0{,}019$'dan $0{,}010$'a iner -- yaklaşık yarıya. Olay ailesinde de
 $0{,}007$'den $0{,}003$'e benzer bir düşüş gözlenir. Bu, tek seferlik
 bir değer bildirmesi gereken senaryolarda tahmin tekrarlanabilirliğini
 güçlendiren, mütevazı ortalama kazancın yanına eklenen pratik bir
@@ -302,10 +304,12 @@ macro-F1 $0{,}247$'den $0{,}277$'ye yükselir ($+0{,}030$). FCMAE
 verir: TTA yok $\to$ \{orig, hflip, vflip, rot180\} ortalaması,
 ortalama macro-F1'i $0{,}271$'den $0{,}277$'ye taşır ($+0{,}006$).
 (iii)~Inference sırasında multiplicative \textbf{no-change gate}
-eklemenin etkisi pratikte sıfırdır ($-0{,}002$); değişimsiz çift oranı
-veri kümesinde \%28 düzeyinde olsa da head'lerin sigmoid çıktıları
-zaten görece düşük sınıf olasılıkları üretmekte, gate ayrı bir kazanç
-sağlayamamaktadır.
+eklemenin etkisi her iki aşamada da marjinaldir (Aşama~1: $-0{,}002$,
+Aşama~2: $-0{,}001$ macro-F1); değişimsiz çift oranı veri kümesinde
+\%28 düzeyinde olsa da head'lerin sigmoid çıktıları zaten görece düşük
+sınıf olasılıkları üretmekte, gate ayrı bir kazanç sağlayamamaktadır.
+Bu null bulgu nedeniyle gate kanonik inference reçetesinden çıkarılmış,
+yalnız ablation satırı olarak korunmuştur.
 
 (iv)~Long-tail nesne ailesinde \textbf{DBLoss}, default $0{,}5$
 eşiğinde ASL'nin altında kalır ($0{,}266$ vs.\ $0{,}303$); ancak
@@ -314,9 +318,9 @@ manzarasının ASL'ninkinden farklı bir karar sınırı ürettiğini ve
 $0{,}5$'in tüm sınıflar için kalibre olmadığını gösterir -- buna
 rağmen tuned eşikli DBLoss bile ASL'yi geçemez. (v)~\textbf{BIT
 füzyonu}, aynı backbone üzerinde passthrough fusion'a (``BIT yok''
-satırı) kıyasla ortalama macro-F1'i $0{,}273$'ten $0{,}282$'ye taşır
-($+0{,}009$); ve daha önemlisi, en zorlu nesne ailesinde seed başına
-std'yi $0{,}023$'ten $0{,}010$'a düşürür. (vi)~Aşama~2'nin üzerine
+satırı) kıyasla ortalama macro-F1'i $0{,}276$'dan $0{,}283$'e taşır
+($+0{,}007$); ve daha önemlisi, en zorlu nesne ailesinde seed başına
+std'yi $0{,}019$'dan $0{,}010$'a düşürür. (vi)~Aşama~2'nin üzerine
 Query2Label heads ve uncertainty-weighted loss ekleyen
 \textbf{full-stack} varyantı, $0{,}181 \pm 0{,}042$ ile kanonik
 konfigürasyonun belirgin biçimde altında kalır; bu varyant 50 epoch
@@ -353,7 +357,7 @@ tahminleri barındırır. Bu, hatanın tek bir noktaya değil, uzun
 kuyruğun karşılık geldiği görece nadir sahne kompozisyonlarına
 yayıldığına işaret eder.
 
-\begin{figure}[t]
+\begin{figure}[!tbp]
   \centering
   \includegraphics[width=\linewidth]{perclass_phase2_object.png}
   \caption{Aşama~2 nesne ailesinde test kümesi sınıf-bazlı F1
@@ -364,7 +368,7 @@ yayıldığına işaret eder.
   \label{fig:perclass}
 \end{figure}
 
-\begin{figure}[t]
+\begin{figure}[!tbp]
   \centering
   \includegraphics[width=\linewidth]{curves_phase2.png}
   \caption{Aşama~2 kanonik modelin üç seed üzerindeki eğitim
@@ -374,7 +378,7 @@ yayıldığına işaret eder.
   \label{fig:curves}
 \end{figure}
 
-\begin{figure}[t]
+\begin{figure}[!htbp]
   \centering
   \includegraphics[width=\linewidth]{qualitative.png}
   \caption{Aşama~2 kanonik modelden (seed 42) test kümesinde nitel
@@ -386,7 +390,7 @@ yayıldığına işaret eder.
 \end{figure}
 
 % =====================================================================
-\section{Sonuç}
+\section{Tartışma ve Sonuç}
 % 0.2 sayfa.
 
 Bu çalışma, multi-label bitemporal change classification üzerinde iki
@@ -398,9 +402,32 @@ long-tail nesne ailesi hâlâ darboğazdır; per-class threshold tuning ve
 DBLoss gibi müdahaleler kalibrasyon farkını kapatır ancak ASL'yi geçmez.
 Query2Label heads ve uncertainty-weighted loss gibi ek mimari katmanlar,
 bu veri ölçeğinde aşırı parametre maliyeti karşılığında ortalama bir
-düşüşe yol açmıştır. Önümüzdeki çalışmalarda DINOv2 öz-denetimli
-özellikleri ve daha geniş veri kümeleriyle uzun kuyruğu hafifletme
-yönlerinde ilerlenebilir.
+düşüşe yol açmıştır.
+
+Pratik açıdan üç çıkarım öne çıkar. Birincisi, sınırlı veri ölçeğinde
+modern bir ConvNet backbone'a (FCMAE ön-eğitimli ConvNeXt-V2) yatırım
+yapmak, ablation'daki en büyük tek sıçrama olarak ek mimari maliyet
+getirmeden $+0{,}030$ macro-F1 sağlar. İkincisi, sabit ve yorumlanabilir
+kayıp ağırlıkları (örn.\ $\{1, 1, 1, 0{,}2\}$), bu ölçekte öğrenilebilir
+uncertainty parametrelerinden çok daha güvenilirdir; UWL eklemenin
+kanonik konfigürasyonun belirgin biçimde altında bir noktada kalması bu
+yargıyı destekler. Üçüncüsü, BIT füzyonunun nesne ailesinde seed
+varyansını yaklaşık yarıya indirmesi, tek-seferlik raporlama gereken
+pratik senaryolarda ortalama kazanım kadar değerli bir katkıdır.
+
+Çalışmanın sınırlamaları açıktır: eşik kalibrasyonu yalnızca DBLoss
+için per-class yapılmış, ASL ve BIT konfigürasyonlarına aynı tuning
+uygulanmamıştır; bu nedenle raporlanan $0{,}5$ eşiği özellikle nadir
+sınıflar için ideal değildir. Augmentation reçetesi standart
+pair-aware tekniklerle sınırlıdır; copy-paste veya kuyruk-bilinçli
+oversampling gibi long-tail'e özgü müdahaleler denenmemiştir.
+Değerlendirme tek bir donmuş bölümleme üzerindedir; cross-validation
+veya alternatif coğrafi/temporal bölünmelerle dirençlilik kontrolü
+gelecek çalışmalara bırakılmıştır.
+
+Önümüzdeki çalışmalarda DINOv2 öz-denetimli özellikleri, kuyruk-bilinçli
+sampling'in ASL ile birleştirilmesi ve per-class eşik öğreten post-hoc
+adapter modülleri umut verici yönler olarak görünmektedir.
 
 % =====================================================================
 \bibliographystyle{IEEEtran}
