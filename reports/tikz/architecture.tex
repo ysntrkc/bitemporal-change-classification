@@ -65,11 +65,6 @@
       at ($(p2A.north)!0.5!(p2B.north)+(0,3mm)$)
       {Aşama~2: birleşik\\çok-görevli (1 model)};
 
-    \node[font=\scriptsize, below=2mm of p2loss, align=center]
-      {Opsiyonel inference gate (ablation):
-        $p_{\text{fam}} \leftarrow p_{\text{fam}} \cdot
-        \sigma(\ell_{\text{nochg}})$};
-
   \end{tikzpicture}
   \caption{Aşama~1 (sol) ve Aşama~2 (sağ). Her iki yapı ConvNeXt-V2
     Tiny Siamese encoder'ı paylaşır. Aşama~1, her etiket ailesi için
@@ -77,10 +72,10 @@
     ve sigmoid family head'e beslenir. Aşama~2 aynı encoder'ı korur,
     aynı MLP'den önce Bitemporal Image Transformer (BIT) fusion bloğunu
     yerleştirir ve dört head üretir (üç family logit ve bir nochg
-    skaleri); loss'lar fixed task weights ile toplanır. Multiplicative
-    no-change gate yalnız ablation amaçlı opsiyoneldir -- canonical
-    inference setup'ında devre dışıdır (bkz.\ Tablo~\ref{tab:ablation}).
-    Full-stack ablation'da Query2Label heads ve uncertainty-weighted
-    loss doğrudan drop-in ikamelerdir.}
+    skaleri); loss'lar fixed task weights ile toplanır. Şekil yalnız
+    her iki aşamanın kanonik yapılandırmasını gösterir; opsiyonel
+    bileşenler (no-change gate, Query2Label heads, uncertainty-weighted
+    loss) Tablo~\ref{tab:ablation}'de ablation satırları olarak
+    raporlanır.}
   \label{fig:arch}
 \end{figure*}
