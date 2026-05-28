@@ -58,28 +58,11 @@
 \maketitle
 
 \begin{abstract}
-İki zamanlı (bitemporal) havadan RGB görüntü çiftleri üzerinde, üç
-bağımsız etiket ailesini paralel olarak öğrenen çok etiketli bir değişim
-sınıflandırma problemini ele alıyoruz: 12 nesne sınıfı, 12 olay sınıfı ve
-24 öznitelik sınıfı (toplam 48 sigmoid başlık). Veri kümesi belirgin
-biçimde uzun-kuyrukludur (long-tail): nesne ailesinde en sık görülen
-sınıf, en seyrek görülenden 270 kat daha fazla pozitif örneğe sahiptir.
-Aynı ConvNeXt-V2 Tiny Siamese backbone altında iki model ailesi
-eğitiyoruz: (i) four-way fusion (birleştirme, mutlak fark, Hadamard
-çarpımı) ve Asymmetric Loss (ASL) ile çalışan, aileye özel üç
-tek-görevli Aşama~1 modeli; (ii) aynı backbone'a Bitemporal Image
-Transformer (BIT) füzyonu uygulayan ve sabit ağırlıklı çok-görevli
-(multi-task) kayıpla eğitilen Aşama~2 birleşik modeli. Aşama~1 üç seed üzerinde 0{,}277
-macro-F1 ortalamasına, Aşama~2 ise 0{,}283'e ulaşıyor; BIT hem küçük bir
-ortalama kazanım hem de seed'ler arası varyansta belirgin düşüş
-sağlıyor. Etkisi marjinal kalan no-change gate'i ve geri tepen
-Query2Label başlıkları ile uncertainty-weighted loss denemelerini
-negatif sonuç olarak dürüstçe raporluyoruz.
+İki zamanlı (bitemporal) havadan RGB görüntü çiftleri üzerinde, üç bağımsız etiket ailesini paralel olarak öğrenen çok etiketli bir değişim sınıflandırma problemini ele alıyoruz: 12 nesne sınıfı, 12 olay sınıfı ve 24 öznitelik sınıfı (toplam 48 sigmoid başlık). Veri kümesi belirgin biçimde uzun-kuyrukludur (long-tail): nesne ailesinde en sık görülen sınıf, en seyrek görülenden 270 kat daha fazla pozitif örneğe sahiptir. Aynı ConvNeXt-V2 Tiny Siamese backbone altında iki model ailesi eğitiyoruz: (i) four-way fusion (birleştirme, mutlak fark, Hadamard çarpımı) ve Asymmetric Loss (ASL) ile çalışan, aileye özel üç tek-görevli Aşama~1 modeli; (ii) aynı backbone'a Bitemporal Image Transformer (BIT) füzyonu uygulayan ve sabit ağırlıklı çok-görevli (multi-task) kayıpla eğitilen Aşama~2 birleşik modeli. Aşama~1 üç seed üzerinde 0{,}277 macro-F1 ortalamasına, Aşama~2 ise 0{,}283'e ulaşıyor; BIT hem küçük bir ortalama kazanım hem de seed'ler arası varyansta belirgin düşüş sağlıyor. Etkisi marjinal kalan no-change gate'i ve geri tepen Query2Label başlıkları ile uncertainty-weighted loss denemelerini negatif sonuç olarak dürüstçe raporluyoruz.
 \end{abstract}
 
 \begin{IEEEkeywords}
-multi-label classification, change detection, long-tail learning, vision
-transformer, bitemporal imagery.
+multi-label classification, change detection, long-tail learning, vision transformer, bitemporal imagery.
 \end{IEEEkeywords}
 
 % =====================================================================
@@ -90,65 +73,19 @@ transformer, bitemporal imagery.
 \begin{figure}[t]
   \centering
   \includegraphics[width=\linewidth]{teaser.png}
-  \caption{İki zamanlı değişim sınıflandırması: $(A, B)$ girdisi
-    verildiğinde model üç ailede toplam 48 sigmoid çıktısı üretir. Test
-    kümesinden bir başarı ve bir hata örneği, tahmin olasılıklarıyla
-    birlikte gösterilmiştir.}
+  \caption{İki zamanlı değişim sınıflandırması: $(A, B)$ girdisi verildiğinde model üç ailede toplam 48 sigmoid çıktısı üretir. Test kümesinden bir başarı ve bir hata örneği, tahmin olasılıklarıyla birlikte gösterilmiştir.}
   \label{fig:teaser}
 \end{figure}
 
-Bitemporal change classification, aynı coğrafi konumun iki farklı
-zamana ait havadan görüntülerinin ($A$, $B$) verildiği durumda,
-sahnedeki değişimi piksel düzeyinde bir maske olarak değil semantik
-bir etiket kümesi olarak betimlemeyi hedefler. Bu kurulum, klasik
-change detection'ın ``nerede değişti?'' sorusunu, ``ne, nasıl ve
-hangi nesne üzerinde değişti?'' sorularıyla genişletir; afet hasar
-tespiti, kentsel gelişim izleme ve arazi kullanımı analizi gibi
-uygulamalarda yorumlanabilir bir çıktı sağlar. Çalıştığımız veri
-kümesi bu zenginliği üç tamamlayıcı etiket ailesi üzerinden yakalar:
-\emph{nesne} (sahnedeki fiziksel sınıf; örn.\ \texttt{building},
-\texttt{tree}, \texttt{road}), \emph{olay} (değişimin yapısı; örn.\
-\texttt{build}, \texttt{remove}, \texttt{increase}) ve
-\emph{öznitelik} (görsel/anlamsal nitelik; örn.\ \texttt{blue},
-\texttt{large}, \texttt{empty}). Üç aile semantik olarak kısmen
-örtüşse de ground-truth açısından bağımsız etiketlenir: aynı çift hem
-nesne ailesinde \texttt{tree}, hem olay ailesinde \texttt{increase},
-hem öznitelik ailesinde \texttt{blue} gibi eş zamanlı pozitiflere
-sahip olabilir. Bu da problemi doğal olarak çok etiketli kılar ve
-aileler arası bağımsızlığa saygılı bir modelleme tercihi gerektirir.
+Bitemporal change classification, aynı coğrafi konumun iki farklı zamana ait havadan görüntülerinin ($A$, $B$) verildiği durumda, sahnedeki değişimi piksel düzeyinde bir maske olarak değil semantik bir etiket kümesi olarak betimlemeyi hedefler. Bu kurulum, klasik change detection'ın ``nerede değişti?'' sorusunu, ``ne, nasıl ve hangi nesne üzerinde değişti?'' sorularıyla genişletir; afet hasar tespiti, kentsel gelişim izleme ve arazi kullanımı analizi gibi uygulamalarda yorumlanabilir bir çıktı sağlar. Çalıştığımız veri kümesi bu zenginliği üç tamamlayıcı etiket ailesi üzerinden yakalar: \emph{nesne} (sahnedeki fiziksel sınıf; örn.\ \texttt{building}, \texttt{tree}, \texttt{road}), \emph{olay} (değişimin yapısı; örn.\ \texttt{build}, \texttt{remove}, \texttt{increase}) ve \emph{öznitelik} (görsel/anlamsal nitelik; örn.\ \texttt{blue}, \texttt{large}, \texttt{empty}). Üç aile semantik olarak kısmen örtüşse de ground-truth açısından bağımsız etiketlenir: aynı çift hem nesne ailesinde \texttt{tree}, hem olay ailesinde \texttt{increase}, hem öznitelik ailesinde \texttt{blue} gibi eş zamanlı pozitiflere sahip olabilir. Bu da problemi doğal olarak çok etiketli kılar ve aileler arası bağımsızlığa saygılı bir modelleme tercihi gerektirir.
 
-Bitemporal change detection, klasik değişim haritalama yaklaşımlarına
-göre multi-label ayrıştırma ile daha güçlü bir denetim sinyali sağlar;
-ancak ailelerin birbirinden bağımsız multi-label yapısı ve dengesiz
-sınıf dağılımı modelleme tarafında ek zorluklar getirir. Bu çalışmanın
-katkıları üç başlık altında özetlenebilir: (1)~Kontrollü bir ResNet-50
-karşılaştırması ile motive edilen modern
-ConvNeXt-V2~\cite{woo2023convnextv2} backbone seçimi; (2)~Aşama~2'de
-BIT~\cite{chen2022bit} stili token tabanlı bir fusion bloğunun
-değerlendirilmesi; (3)~Query2Label~\cite{liu2021q2l},
-uncertainty-weighted loss~\cite{kendall2018uwl} ve no-change gate gibi
-çalışmadığı görülen seçeneklerin dürüstçe raporlanması.
+Bitemporal change detection, klasik değişim haritalama yaklaşımlarına göre multi-label ayrıştırma ile daha güçlü bir denetim sinyali sağlar; ancak ailelerin birbirinden bağımsız multi-label yapısı ve dengesiz sınıf dağılımı modelleme tarafında ek zorluklar getirir. Bu çalışmanın katkıları üç başlık altında özetlenebilir: (1)~Kontrollü bir ResNet-50 karşılaştırması ile motive edilen modern ConvNeXt-V2~\cite{woo2023convnextv2} backbone seçimi; (2)~Aşama~2'de BIT~\cite{chen2022bit} stili token tabanlı bir fusion bloğunun değerlendirilmesi; (3)~Query2Label~\cite{liu2021q2l}, uncertainty-weighted loss~\cite{kendall2018uwl} ve no-change gate gibi çalışmadığı görülen seçeneklerin dürüstçe raporlanması.
 
 % =====================================================================
 \section{İlgili Çalışmalar}
 % 0.4 sayfa.
 
-Change detection literatürü son yıllarda transformer tabanlı fusion
-bloklarının baskınlığına tanık olmuştur; BIT~\cite{chen2022bit} bu
-eğilimin temsil edici örneklerinden biridir. Multi-label sınıflandırmada
-Asymmetric Loss (ASL)~\cite{ridnik2021asl} pozitif ve negatif örnekler
-için ayrı focusing parametreleri tanımlar ve long-tail ortamlarda güçlü
-bir varsayılan olarak kabul görür. Query2Label~\cite{liu2021q2l} her
-sınıfa öğrenilebilir bir query atayarak multi-label karar verme
-problemini bir transformer decoder'a taşır. Long-tail multi-label
-problemlere odaklı Distribution-Balanced Loss
-(DBLoss)~\cite{wu2020dbloss} seyrek sınıflar için positive weighting ve
-negative-tolerant düzeltmeleri ekler. Multi-task ağırlıklandırma için
-Kendall ve arkadaşları~\cite{kendall2018uwl}, her görev için
-öğrenilebilir bir uncertainty parametresi öneren bir formülasyon sunar.
-Backbone seçimimiz modern ConvNeXt-V2~\cite{woo2023convnextv2} ailesine
-dayanır; karşılaştırma temeli olarak orijinal
-ResNet-50~\cite{he2016resnet} mimarisini kullanırız.
+Change detection literatürü son yıllarda transformer tabanlı fusion bloklarının baskınlığına tanık olmuştur; BIT~\cite{chen2022bit} bu eğilimin temsil edici örneklerinden biridir. Multi-label sınıflandırmada Asymmetric Loss (ASL)~\cite{ridnik2021asl} pozitif ve negatif örnekler için ayrı focusing parametreleri tanımlar ve long-tail ortamlarda güçlü bir varsayılan olarak kabul görür. Query2Label~\cite{liu2021q2l} her sınıfa öğrenilebilir bir query atayarak multi-label karar verme problemini bir transformer decoder'a taşır. Long-tail multi-label problemlere odaklı Distribution-Balanced Loss (DBLoss)~\cite{wu2020dbloss} seyrek sınıflar için positive weighting ve negative-tolerant düzeltmeleri ekler. Multi-task ağırlıklandırma için Kendall ve arkadaşları~\cite{kendall2018uwl}, her görev için öğrenilebilir bir uncertainty parametresi öneren bir formülasyon sunar. Backbone seçimimiz modern ConvNeXt-V2~\cite{woo2023convnextv2} ailesine dayanır; karşılaştırma temeli olarak orijinal ResNet-50~\cite{he2016resnet} mimarisini kullanırız.
 
 % =====================================================================
 \section{Yöntem}
@@ -157,78 +94,31 @@ ResNet-50~\cite{he2016resnet} mimarisini kullanırız.
 \subsection{Ortak backbone}
 % Aşama 1 ve Aşama 2 aynı Siamese backbone'u paylaşır.
 
-İki zamanlı $A$ ve $B$ görüntüleri batch dimension üzerinden
-birleştirilip, FCMAE ön-eğitimiyle elde edilmiş ConvNeXt-V2
-Tiny~\cite{woo2023convnextv2} backbone'unun tek bir forward pass'ine
-verilir; çıktı $\mathbb{R}^{B \times 768 \times 7 \times 7}$ boyutunda
-$(f_A, f_B)$ olarak ayrıştırılır. Aynı batch işlemi, BatchNorm
-istatistiklerinin de iki görüntü için özdeş kalmasını garanti eder.
+İki zamanlı $A$ ve $B$ görüntüleri batch dimension üzerinden birleştirilip, FCMAE ön-eğitimiyle elde edilmiş ConvNeXt-V2 Tiny~\cite{woo2023convnextv2} backbone'unun tek bir forward pass'ine verilir; çıktı $\mathbb{R}^{B \times 768 \times 7 \times 7}$ boyutunda $(f_A, f_B)$ olarak ayrıştırılır. Aynı batch işlemi, BatchNorm istatistiklerinin de iki görüntü için özdeş kalmasını garanti eder.
 
 \subsection{Aşama 1: tek-görevli başlıklar}
 
-Her aile için global average pooling'in ardından four-way fusion vektörü
-oluşturulur: $[f_A;\, f_B;\, |f_A - f_B|;\, f_A \odot f_B]$. Bu 4D
-boyutlu vektör, genişliği 512 olan LayerNorm-MLP bloğundan geçirilir ve
-aile sayısına ($C_f$) eşit sigmoid çıktı üreten linear bir başlığa
-beslenir. Buna paralel, tek boyutlu bir no-change head çiftin değişip
-değişmediğini tahmin eder. Loss olarak Asymmetric
-Loss~\cite{ridnik2021asl} ($\gamma^-{=}4$, $\gamma^+{=}0$, clip
-$0{,}05$) kullanılır; no-change head'e $0{,}2$ ağırlıklı binary
-cross-entropy (BCE) eklenir.
+Her aile için global average pooling'in ardından four-way fusion vektörü oluşturulur: $[f_A;\, f_B;\, |f_A - f_B|;\, f_A \odot f_B]$. Bu 4D boyutlu vektör, genişliği 512 olan LayerNorm-MLP bloğundan geçirilir ve aile sayısına ($C_f$) eşit sigmoid çıktı üreten linear bir başlığa beslenir. Buna paralel, tek boyutlu bir no-change head çiftin değişip değişmediğini tahmin eder. Loss olarak Asymmetric Loss~\cite{ridnik2021asl} ($\gamma^-{=}4$, $\gamma^+{=}0$, clip $0{,}05$) kullanılır; no-change head'e $0{,}2$ ağırlıklı binary cross-entropy (BCE) eklenir.
 
 \subsection{Aşama 2: birleşik multi-task model}
 % Aynı backbone + BIT + 4 başlık.
 
-Aşama~2 aynı backbone'u kullanır; ancak GAP'ten önce
-BIT~\cite{chen2022bit} stili bir fusion bloğu yerleştirilir. Her zaman
-dilimi için $L{=}4$ öğrenilebilir token çıkarılır, birleşik temsil
-pre-LN transformer encoder (iki katman, $n_\text{head}{=}8$) ile
-zenginleştirilir, ardından cross-attention ile her zaman dilimine geri
-yansıtılır. Aynı four-way fusion + MLP, üç aile için linear heads ve bir
-no-change head'e ayrılır. Tüm task loss'ları fixed weight ile ($\{1, 1,
-1, 0{,}2\}$) toplanır. Ablation amaçlı drop-in olarak Query2Label
-heads~\cite{liu2021q2l} ve uncertainty-weighted loss~\cite{kendall2018uwl}
-kullanılabilen üç eksen konfigüre edilebilir (fusion
-$\in\{$BIT, passthrough$\}$, heads $\in\{$linear, Q2L$\}$, aggregation
-$\in\{$fixed, uncertainty$\}$). Inference sırasında opsiyonel
-(ablation amaçlı) multiplicative no-change gate tanımlanır:
-$p^{\text{gated}}_{\text{fam}} = p_{\text{fam}} \cdot
-\sigma(\ell_{\text{nochg}})$; kanonik konfigürasyonda gate kapalıdır
-(bkz.\ Tablo~\ref{tab:ablation}).
+Aşama~2 aynı backbone'u kullanır; ancak GAP'ten önce BIT~\cite{chen2022bit} stili bir fusion bloğu yerleştirilir. Her zaman dilimi için $L{=}4$ öğrenilebilir token çıkarılır, birleşik temsil pre-LN transformer encoder (iki katman, $n_\text{head}{=}8$) ile zenginleştirilir, ardından cross-attention ile her zaman dilimine geri yansıtılır. Aynı four-way fusion + MLP, üç aile için linear heads ve bir no-change head'e ayrılır. Tüm task loss'ları fixed weight ile ($\{1, 1, 1, 0{,}2\}$) toplanır. Ablation amaçlı drop-in olarak Query2Label heads~\cite{liu2021q2l} ve uncertainty-weighted loss~\cite{kendall2018uwl} kullanılabilen üç eksen konfigüre edilebilir (fusion $\in\{$BIT, passthrough$\}$, heads $\in\{$linear, Q2L$\}$, aggregation $\in\{$fixed, uncertainty$\}$). Inference sırasında opsiyonel (ablation amaçlı) multiplicative no-change gate tanımlanır: $p^{\text{gated}}_{\text{fam}} = p_{\text{fam}} \cdot \sigma(\ell_{\text{nochg}})$; kanonik konfigürasyonda gate kapalıdır (bkz.\ Tablo~\ref{tab:ablation}).
 
 \input{tikz/architecture}
 
 \subsection{Eğitim reçetesi}
-Optimizer olarak AdamW~\cite{loshchilov2019adamw} kullanılır; head
-learning rate $3{\times}10^{-4}$, backbone learning rate Aşama~1 için
-$3{\times}10^{-5}$, Aşama~2 için $2{\times}10^{-5}$, layer-wise learning
-rate decay (LLRD) katsayısı $0{,}8$, weight decay $0{,}05$. Cosine
-schedule $3$ veya $4$ epoch warmup ile kullanılır. RTX~5070 üzerinde
-mixed-precision (bf16) hesaplaması yapılır. EMA decay $0{,}999$ ve
-$1000$ adım warmup ile uygulanır. Gradient clipping $1{,}0$
-seviyesindedir. Train sampling $w_i = 1/\sqrt{1 + n_\text{pos}(i)}$
-ağırlığıyla yapılır; Aşama~1 için sadece hedef aile, Aşama~2 için üç
-ailenin birleşimi pozitif sayım olarak alınır. Pair-aware augmentation
-(yatay/dikey çevirme, döndürme, afin) ile photometric jitter ve $0{,}3$
-olasılıklı CutMix uygulanır. Üç seed kullanılır: $42$, $1337$ ve $2024$.
+Optimizer olarak AdamW~\cite{loshchilov2019adamw} kullanılır; head learning rate $3{\times}10^{-4}$, backbone learning rate Aşama~1 için $3{\times}10^{-5}$, Aşama~2 için $2{\times}10^{-5}$, layer-wise learning rate decay (LLRD) katsayısı $0{,}8$, weight decay $0{,}05$. Cosine schedule $3$ veya $4$ epoch warmup ile kullanılır. RTX~5070 üzerinde mixed-precision (bf16) hesaplaması yapılır. EMA decay $0{,}999$ ve $1000$ adım warmup ile uygulanır. Gradient clipping $1{,}0$ seviyesindedir. Train sampling $w_i = 1/\sqrt{1 + n_\text{pos}(i)}$ ağırlığıyla yapılır; Aşama~1 için sadece hedef aile, Aşama~2 için üç ailenin birleşimi pozitif sayım olarak alınır. Pair-aware augmentation (yatay/dikey çevirme, döndürme, afin) ile photometric jitter ve $0{,}3$ olasılıklı CutMix uygulanır. Üç seed kullanılır: $42$, $1337$ ve $2024$.
 
 % =====================================================================
 \section{Deneyler}
 % 0.4 sayfa.
 
 \subsection{Veri kümesi ve bölümleme}
-Bitemporal havadan RGB çiftleri, donmuş train/val/test bölümlemesiyle
-kullanılır. Çiftlerin yaklaşık \%28'i değişimsizdir (her ailede sıfır
-etiketli). Aile bazında imbalance oldukça ağırdır: nesne $\approx
-270{:}1$, öznitelik $\approx 67{:}1$, olay $\approx 28{:}1$. Bölümler
-arası dosya adı sızıntısı denetlenmiş ve sıfır çakışma kaydedilmiştir.
+Bitemporal havadan RGB çiftleri, donmuş train/val/test bölümlemesiyle kullanılır. Çiftlerin yaklaşık \%28'i değişimsizdir (her ailede sıfır etiketli). Aile bazında imbalance oldukça ağırdır: nesne $\approx 270{:}1$, öznitelik $\approx 67{:}1$, olay $\approx 28{:}1$. Bölümler arası dosya adı sızıntısı denetlenmiş ve sıfır çakışma kaydedilmiştir.
 
 \subsection{Değerlendirme}
-Birincil metrik macro-F1; yanında micro-F1, macro precision/recall ve
-mean average precision (mAP) raporlanır. Varsayılan threshold
-$0{,}5$'tir; bir satır açıkça val split üzerinde per-class threshold
-tuning yaptığını belirtir. Test-time augmentation (TTA), \{orig, hflip,
-vflip, rot180\} olasılıklarını ortalar.
+Birincil metrik macro-F1; yanında micro-F1, macro precision/recall ve mean average precision (mAP) raporlanır. Varsayılan threshold $0{,}5$'tir; bir satır açıkça val split üzerinde per-class threshold tuning yaptığını belirtir. Test-time augmentation (TTA), \{orig, hflip, vflip, rot180\} olasılıklarını ortalar.
 
 % =====================================================================
 \section{Sonuçlar}
@@ -237,162 +127,49 @@ vflip, rot180\} olasılıklarını ortalar.
 \subsection{Ana sonuçlar}
 \input{tables/main_results}
 
-Tablo~\ref{tab:main}'de Aşama~1 ve Aşama~2'nin test kümesindeki
-performansı yan yana verilmiştir. Üç seed üzerinde ortalama macro-F1,
-Aşama~1 için $0{,}277 \pm 0{,}023$, Aşama~2 için $0{,}283 \pm 0{,}029$'a
-ulaşır; BIT füzyonunun toplam macro-F1 üzerindeki etkisi mütevazıdır
-($+0{,}006$ puan). Aile bazında bakıldığında nesne ($+0{,}010$) ve
-olay ($+0{,}009$) ailelerinde belirgin iyileşme gözlenirken öznitelik
-ailesinde küçük bir düşüş ($-0{,}003$) yaşanır; BIT'in fayda profili
-ailelere göre farklılaşmakta, tek bir sayıya indirgenememektedir.
+Tablo~\ref{tab:main}'de Aşama~1 ve Aşama~2'nin test kümesindeki performansı yan yana verilmiştir. Üç seed üzerinde ortalama macro-F1, Aşama~1 için $0{,}277 \pm 0{,}023$, Aşama~2 için $0{,}283 \pm 0{,}029$'a ulaşır; BIT füzyonunun toplam macro-F1 üzerindeki etkisi mütevazıdır ($+0{,}006$ puan). Aile bazında bakıldığında nesne ($+0{,}010$) ve olay ($+0{,}009$) ailelerinde belirgin iyileşme gözlenirken öznitelik ailesinde küçük bir düşüş ($-0{,}003$) yaşanır; BIT'in fayda profili ailelere göre farklılaşmakta, tek bir sayıya indirgenememektedir.
 
 \input{tables/phase1_canonical_extended}
 
-Tablo~\ref{tab:phase1-extended} Aşama~1 kanonik konfigürasyonu için
-(aile başına tek-görevli model, ASL kaybı, TTA \{orig, hflip, vflip,
-rot180\}, EMA, default eşik) genişletilmiş metrikleri verir. Macro-F1'in
-mikro-F1'in belirgin biçimde altında kalması (nesne için $0{,}303$ vs
-$0{,}702$) macro-F1'i ana metrik olarak seçmemizin gerekçesini
-somutlaştırır: sık görülen birkaç başlığın doğru tahmin edilmesi
-micro ortalamayı yüksek tutarken, uzun kuyruktaki nadir sınıflar
-macro ortalamasını aşağı çeker. Aradaki uçurum olay ve öznitelik
-ailelerinde daha ılımlıdır ($0{,}272$ vs $0{,}430$ ve $0{,}258$ vs
-$0{,}438$), zira buradaki imbalance nesne ailesinin $270{:}1$ oranına
-göre çok daha hafiftir ($28{:}1$ ve $67{:}1$). Macro precision ile
-macro recall karşılaştırmasında nesne ailesinde iki ölçüt birbirine
-çok yakındır ($0{,}313$ vs $0{,}316$); buna karşın olay ve öznitelik
-ailelerinde recall belirgin biçimde precision'ın üzerindedir (olay:
-$0{,}366$ vs $0{,}231$; öznitelik: $0{,}317$ vs $0{,}237$). Tek-görevli
-Aşama~1 modeli bu iki ailede nadir sınıflara gereğinden fazla pozitif
-tahmin atama eğilimindedir.
+Tablo~\ref{tab:phase1-extended} Aşama~1 kanonik konfigürasyonu için (aile başına tek-görevli model, ASL kaybı, TTA \{orig, hflip, vflip, rot180\}, EMA, default eşik) genişletilmiş metrikleri verir. Macro-F1'in mikro-F1'in belirgin biçimde altında kalması (nesne için $0{,}303$ vs $0{,}702$) macro-F1'i ana metrik olarak seçmemizin gerekçesini somutlaştırır: sık görülen birkaç başlığın doğru tahmin edilmesi micro ortalamayı yüksek tutarken, uzun kuyruktaki nadir sınıflar macro ortalamasını aşağı çeker. Aradaki uçurum olay ve öznitelik ailelerinde daha ılımlıdır ($0{,}272$ vs $0{,}430$ ve $0{,}258$ vs $0{,}438$), zira buradaki imbalance nesne ailesinin $270{:}1$ oranına göre çok daha hafiftir ($28{:}1$ ve $67{:}1$). Macro precision ile macro recall karşılaştırmasında nesne ailesinde iki ölçüt birbirine çok yakındır ($0{,}313$ vs $0{,}316$); buna karşın olay ve öznitelik ailelerinde recall belirgin biçimde precision'ın üzerindedir (olay: $0{,}366$ vs $0{,}231$; öznitelik: $0{,}317$ vs $0{,}237$). Tek-görevli Aşama~1 modeli bu iki ailede nadir sınıflara gereğinden fazla pozitif tahmin atama eğilimindedir.
 
 \input{tables/main_method_extended}
 
-Tablo~\ref{tab:main-extended} aynı genişletilmiş çerçeveyi Aşama~2
-BIT-only kanonik konfigürasyonu için (TTA) tekrarlar; iki tablo
-birlikte okunduğunda BIT füzyonunun ölçü
-profilini ailelere göre nasıl kaydırdığı görünür hale gelir. Macro-F1
-ortalaması yukarı kayarken ($0{,}277 \to 0{,}283$), micro-F1 üç ailede
-de bir miktar aşağı düşer (nesne $0{,}702 \to 0{,}696$, olay
-$0{,}430 \to 0{,}419$, öznitelik $0{,}438 \to 0{,}433$): Aşama~2, sık
-görülen başlıklardaki bir miktar mutlak doğruluktan vazgeçip kuyruk
-taraflarındaki kalibrasyona pay aktarmakta, bu da macro öncelikli
-tasarım tercihimizle tutarlı bir dengelemedir. Aile bazında inceleme
-homojen değildir: nesne ailesinde macro precision ve recall birlikte
-yükselir ($0{,}313 \to 0{,}330$ ve $0{,}316 \to 0{,}336$); olay
-ailesinde precision artarken recall geriler ($0{,}366 \to 0{,}339$),
-yani model daha temkinli pozitif tahmin eder; öznitelik ailesinde ise
-macro precision bir miktar düşer ($0{,}237 \to 0{,}222$). Aşama~1'de
-öznitelik için belirgin olan recall--precision farkı ($0{,}317$ vs
-$0{,}237$) Aşama~2'de neredeyse aynen sürer ($0{,}324$ vs $0{,}222$);
-BIT füzyonu bu sistematik aşırı-pozitif eğilimi düzeltmemiş, nadir
-özniteliklere fazla pozitif atama multi-task aşaması altında da
-paylaşılan bir hata kalıbı olarak kalmıştır.
+Tablo~\ref{tab:main-extended} aynı genişletilmiş çerçeveyi Aşama~2 BIT-only kanonik konfigürasyonu için (TTA) tekrarlar; iki tablo birlikte okunduğunda BIT füzyonunun ölçü profilini ailelere göre nasıl kaydırdığı görünür hale gelir. Macro-F1 ortalaması yukarı kayarken ($0{,}277 \to 0{,}283$), micro-F1 üç ailede de bir miktar aşağı düşer (nesne $0{,}702 \to 0{,}696$, olay $0{,}430 \to 0{,}419$, öznitelik $0{,}438 \to 0{,}433$): Aşama~2, sık görülen başlıklardaki bir miktar mutlak doğruluktan vazgeçip kuyruk taraflarındaki kalibrasyona pay aktarmakta, bu da macro öncelikli tasarım tercihimizle tutarlı bir dengelemedir. Aile bazında inceleme homojen değildir: nesne ailesinde macro precision ve recall birlikte yükselir ($0{,}313 \to 0{,}330$ ve $0{,}316 \to 0{,}336$); olay ailesinde precision artarken recall geriler ($0{,}366 \to 0{,}339$), yani model daha temkinli pozitif tahmin eder; öznitelik ailesinde ise macro precision bir miktar düşer ($0{,}237 \to 0{,}222$). Aşama~1'de öznitelik için belirgin olan recall--precision farkı ($0{,}317$ vs $0{,}237$) Aşama~2'de neredeyse aynen sürer ($0{,}324$ vs $0{,}222$); BIT füzyonu bu sistematik aşırı-pozitif eğilimi düzeltmemiş, nadir özniteliklere fazla pozitif atama multi-task aşaması altında da paylaşılan bir hata kalıbı olarak kalmıştır.
 
-Ortalama puan kazanımının ötesinde, BIT'in pratik açıdan en görünür
-katkısı \emph{seed başına standart sapmadaki düşüştür}. Tablo~\ref{tab:ablation}'deki
-aynı backbone'a sahip ``BIT yok'' passthrough varyantı ile
-karşılaştırıldığında, en zorlu nesne ailesinde seed başına std
-$0{,}019$'dan $0{,}010$'a iner -- yaklaşık yarıya. Olay ailesinde de
-$0{,}007$'den $0{,}003$'e benzer bir düşüş gözlenir. Bu, tek seferlik
-bir değer bildirmesi gereken senaryolarda tahmin tekrarlanabilirliğini
-güçlendiren, mütevazı ortalama kazancın yanına eklenen pratik bir
-katkıdır.
+Ortalama puan kazanımının ötesinde, BIT'in pratik açıdan en görünür katkısı \emph{seed başına standart sapmadaki düşüştür}. Tablo~\ref{tab:ablation}'deki aynı backbone'a sahip ``BIT yok'' passthrough varyantı ile karşılaştırıldığında, en zorlu nesne ailesinde seed başına std $0{,}019$'dan $0{,}010$'a iner -- yaklaşık yarıya. Olay ailesinde de $0{,}007$'den $0{,}003$'e benzer bir düşüş gözlenir. Bu, tek seferlik bir değer bildirmesi gereken senaryolarda tahmin tekrarlanabilirliğini güçlendiren, mütevazı ortalama kazancın yanına eklenen pratik bir katkıdır.
 
 \subsection{Ablation analizi}
 \input{tables/ablation}
 
-Tablo~\ref{tab:ablation} altı eksende kontrollü kıyaslamalar sunar.
-(i)~\textbf{Backbone seçimi en büyük tek katkıyı sağlar}: aynı eğitim
-tarifi altında ResNet-50'den ConvNeXt-V2'ye geçildiğinde ortalama
-macro-F1 $0{,}247$'den $0{,}277$'ye yükselir ($+0{,}030$). FCMAE
-ön-eğitimli modern backbone'un üst sınırı belirgin biçimde yukarı
-çektiği açıktır. (ii)~\textbf{TTA} tutarlı fakat küçük bir kazanç
-verir: TTA yok $\to$ \{orig, hflip, vflip, rot180\} ortalaması,
-ortalama macro-F1'i $0{,}271$'den $0{,}277$'ye taşır ($+0{,}006$).
-(iii)~Inference sırasında multiplicative \textbf{no-change gate}
-eklemenin etkisi her iki aşamada da marjinaldir (Aşama~1: $-0{,}002$,
-Aşama~2: $-0{,}001$ macro-F1); değişimsiz çift oranı veri kümesinde
-\%28 düzeyinde olsa da head'lerin sigmoid çıktıları zaten görece düşük
-sınıf olasılıkları üretmekte, gate ayrı bir kazanç sağlayamamaktadır.
-Bu null bulgu nedeniyle gate kanonik inference reçetesinden çıkarılmış,
-yalnız ablation satırı olarak korunmuştur.
+Tablo~\ref{tab:ablation} altı eksende kontrollü kıyaslamalar sunar. (i)~\textbf{Backbone seçimi en büyük tek katkıyı sağlar}: aynı eğitim tarifi altında ResNet-50'den ConvNeXt-V2'ye geçildiğinde ortalama macro-F1 $0{,}247$'den $0{,}277$'ye yükselir ($+0{,}030$). FCMAE ön-eğitimli modern backbone'un üst sınırı belirgin biçimde yukarı çektiği açıktır. (ii)~\textbf{TTA} tutarlı fakat küçük bir kazanç verir: TTA yok $\to$ \{orig, hflip, vflip, rot180\} ortalaması, ortalama macro-F1'i $0{,}271$'den $0{,}277$'ye taşır ($+0{,}006$). (iii)~Inference sırasında multiplicative \textbf{no-change gate} eklemenin etkisi her iki aşamada da marjinaldir (Aşama~1: $-0{,}002$, Aşama~2: $-0{,}001$ macro-F1); değişimsiz çift oranı veri kümesinde \%28 düzeyinde olsa da head'lerin sigmoid çıktıları zaten görece düşük sınıf olasılıkları üretmekte, gate ayrı bir kazanç sağlayamamaktadır. Bu null bulgu nedeniyle gate kanonik inference reçetesinden çıkarılmış, yalnız ablation satırı olarak korunmuştur.
 
-(iv)~Long-tail nesne ailesinde \textbf{DBLoss}, default $0{,}5$
-eşiğinde ASL'nin altında kalır ($0{,}266$ vs.\ $0{,}303$); ancak
-per-class threshold tuning ile $0{,}285$'e çıkar. Bu, DBLoss'un kayıp
-manzarasının ASL'ninkinden farklı bir karar sınırı ürettiğini ve
-$0{,}5$'in tüm sınıflar için kalibre olmadığını gösterir -- buna
-rağmen tuned eşikli DBLoss bile ASL'yi geçemez. (v)~\textbf{BIT
-füzyonu}, aynı backbone üzerinde passthrough fusion'a (``BIT yok''
-satırı) kıyasla ortalama macro-F1'i $0{,}276$'dan $0{,}283$'e taşır
-($+0{,}007$); ve daha önemlisi, en zorlu nesne ailesinde seed başına
-std'yi $0{,}019$'dan $0{,}010$'a düşürür. (vi)~Aşama~2'nin üzerine
-Query2Label heads ve uncertainty-weighted loss ekleyen
-\textbf{full-stack} varyantı, $0{,}181 \pm 0{,}042$ ile kanonik
-konfigürasyonun belirgin biçimde altında kalır; bu varyant 50 epoch
-cap'inde hâlâ yükselmekteydi (\emph{early-stop cap notu}), dolayısıyla
-nihai sayı tam yakınsamayı yansıtmıyor olsa da bu veri ölçeğinde Q2L
-ve UWL'nin getirdiği parametre maliyetinin amortise edilemediği açıktır.
+(iv)~Long-tail nesne ailesinde \textbf{DBLoss}, default $0{,}5$ eşiğinde ASL'nin altında kalır ($0{,}266$ vs.\ $0{,}303$); ancak per-class threshold tuning ile $0{,}285$'e çıkar. Bu, DBLoss'un kayıp manzarasının ASL'ninkinden farklı bir karar sınırı ürettiğini ve $0{,}5$'in tüm sınıflar için kalibre olmadığını gösterir -- buna rağmen tuned eşikli DBLoss bile ASL'yi geçemez. (v)~\textbf{BIT füzyonu}, aynı backbone üzerinde passthrough fusion'a (``BIT yok'' satırı) kıyasla ortalama macro-F1'i $0{,}276$'dan $0{,}283$'e taşır ($+0{,}007$); ve daha önemlisi, en zorlu nesne ailesinde seed başına std'yi $0{,}019$'dan $0{,}010$'a düşürür. (vi)~Aşama~2'nin üzerine Query2Label heads ve uncertainty-weighted loss ekleyen \textbf{full-stack} varyantı, $0{,}181 \pm 0{,}042$ ile kanonik konfigürasyonun belirgin biçimde altında kalır; bu varyant 50 epoch cap'inde hâlâ yükselmekteydi (\emph{early-stop cap notu}), dolayısıyla nihai sayı tam yakınsamayı yansıtmıyor olsa da bu veri ölçeğinde Q2L ve UWL'nin getirdiği parametre maliyetinin amortise edilemediği açıktır.
 
 \subsection{Sınıf bazlı davranış ve nitel örnekler}
 
-Şekil~\ref{fig:perclass}'da nesne ailesinin sınıf bazlı F1 değerleri
-keskin bir azalan eğri çizer: en sık görülen üst sınıflar
-(\texttt{building}, \texttt{tree}, \texttt{road}) makul F1 seviyelerine
-ulaşırken kuyruk sınıflar (\texttt{plant}, \texttt{green}, \texttt{asphalt})
-tutarlı biçimde sıfıra yakın puan alır. Macro-F1'in $0{,}30$ civarında
-kalmasının başlıca nedeni budur: ortalama, kuyruk tarafından aşağı
-çekilmektedir. Per-class threshold tuning bu profili kısmen düzeltir
-ancak az pozitif örnekli sınıflarda recall'u kayda değer ölçüde
-artıramaz; çözüm yönü thresholding değil, daha güçlü öz-denetimli
-ön-eğitim veya kuyruk-bilinçli sampling tarafına geçmek gibi
-görünmektedir.
+Şekil~\ref{fig:perclass}'da nesne ailesinin sınıf bazlı F1 değerleri keskin bir azalan eğri çizer: en sık görülen üst sınıflar (\texttt{building}, \texttt{tree}, \texttt{road}) makul F1 seviyelerine ulaşırken kuyruk sınıflar (\texttt{plant}, \texttt{green}, \texttt{asphalt}) tutarlı biçimde sıfıra yakın puan alır. Macro-F1'in $0{,}30$ civarında kalmasının başlıca nedeni budur: ortalama, kuyruk tarafından aşağı çekilmektedir. Per-class threshold tuning bu profili kısmen düzeltir ancak az pozitif örnekli sınıflarda recall'u kayda değer ölçüde artıramaz; çözüm yönü thresholding değil, daha güçlü öz-denetimli ön-eğitim veya kuyruk-bilinçli sampling tarafına geçmek gibi görünmektedir.
 
-Şekil~\ref{fig:curves} kanonik Aşama~2 modelinin eğitim dinamiğini
-özetler: eğitim kaybı düzgün biçimde azalır, doğrulama kaybı yaklaşık
-30. epoch'tan sonra plato yapar; doğrulama macro-F1 eğrilerindeki
-$\pm 1$ standart sapma bandı BIT füzyonu altında daralır -- bu, ana
-sonuçlar bölümünde tartışılan seed başına std düşüşünün eğitim
-boyunca da gözlemlenebildiğini gösterir. Şekil~\ref{fig:qual}'daki
-nitel örnekler bu davranışla tutarlıdır: başarı örnekleri (üst iki
-satır) tipik olarak sık görülen büyük-ölçekli sahne değişimlerini
-(bina, ağaç, \texttt{increase}) içerirken hata örnekleri (alt iki
-satır) ya kuyruk sınıfa düşmüş etiketleri (\texttt{field},
-\texttt{turn}) ya da tüm ailelerde eşiğin altında kalan eşik-altı
-tahminleri barındırır. Bu, hatanın tek bir noktaya değil, uzun
-kuyruğun karşılık geldiği görece nadir sahne kompozisyonlarına
-yayıldığına işaret eder.
+Şekil~\ref{fig:curves} kanonik Aşama~2 modelinin eğitim dinamiğini özetler: eğitim kaybı düzgün biçimde azalır, doğrulama kaybı yaklaşık 30. epoch'tan sonra plato yapar; doğrulama macro-F1 eğrilerindeki $\pm 1$ standart sapma bandı BIT füzyonu altında daralır -- bu, ana sonuçlar bölümünde tartışılan seed başına std düşüşünün eğitim boyunca da gözlemlenebildiğini gösterir. Şekil~\ref{fig:qual}'daki nitel örnekler bu davranışla tutarlıdır: başarı örnekleri (üst iki satır) tipik olarak sık görülen büyük-ölçekli sahne değişimlerini (bina, ağaç, \texttt{increase}) içerirken hata örnekleri (alt iki satır) ya kuyruk sınıfa düşmüş etiketleri (\texttt{field}, \texttt{turn}) ya da tüm ailelerde eşiğin altında kalan eşik-altı tahminleri barındırır. Bu, hatanın tek bir noktaya değil, uzun kuyruğun karşılık geldiği görece nadir sahne kompozisyonlarına yayıldığına işaret eder.
 
 \begin{figure}[!tbp]
   \centering
   \includegraphics[width=\linewidth]{perclass_phase2_object.png}
-  \caption{Aşama~2 nesne ailesinde test kümesi sınıf-bazlı F1
-    değerleri, üç seed ortalamasına göre azalan sıralanmış. Hata
-    barları $\pm 1$ standart sapmayı gösterir. Grafik altındaki seyrek
-    sınıflar tutarlı biçimde düşük puan alır; makro-F1 düşüşünün büyük
-    bölümü uzun kuyruktan kaynaklanır.}
+  \caption{Aşama~2 nesne ailesinde test kümesi sınıf-bazlı F1 değerleri, üç seed ortalamasına göre azalan sıralanmış. Hata barları $\pm 1$ standart sapmayı gösterir. Grafik altındaki seyrek sınıflar tutarlı biçimde düşük puan alır; makro-F1 düşüşünün büyük bölümü uzun kuyruktan kaynaklanır.}
   \label{fig:perclass}
 \end{figure}
 
 \begin{figure}[!tbp]
   \centering
   \includegraphics[width=\linewidth]{curves_phase2.png}
-  \caption{Aşama~2 kanonik modelin üç seed üzerindeki eğitim
-    dinamiği: eğitim kaybı, doğrulama kaybı ve aile-bazlı doğrulama
-    makro-F1 değerleri (eğriler) ile ortalamaları (kalın çizgi).
-    Gölgeli bantlar $\pm 1$ standart sapmadır.}
+  \caption{Aşama~2 kanonik modelin üç seed üzerindeki eğitim dinamiği: eğitim kaybı, doğrulama kaybı ve aile-bazlı doğrulama makro-F1 değerleri (eğriler) ile ortalamaları (kalın çizgi). Gölgeli bantlar $\pm 1$ standart sapmadır.}
   \label{fig:curves}
 \end{figure}
 
 \begin{figure}[!htbp]
   \centering
   \includegraphics[width=\linewidth]{qualitative.png}
-  \caption{Aşama~2 kanonik modelden (seed 42) test kümesinde nitel
-    örnekler. Üst iki satır en yüksek F1 alan başarı örnekleri, alt
-    iki satır ise en az bir pozitif etiket içerip en düşük F1 alan
-    hata örnekleridir. Her satırda $A$, $B$, gerçek etiketler ve
-    tahmin olasılıkları yan yana gösterilmiştir.}
+  \caption{Aşama~2 kanonik modelden (seed 42) test kümesinde nitel örnekler. Üst iki satır en yüksek F1 alan başarı örnekleri, alt iki satır ise en az bir pozitif etiket içerip en düşük F1 alan hata örnekleridir. Her satırda $A$, $B$, gerçek etiketler ve tahmin olasılıkları yan yana gösterilmiştir.}
   \label{fig:qual}
 \end{figure}
 
@@ -400,41 +177,13 @@ yayıldığına işaret eder.
 \section{Tartışma ve Sonuç}
 % 0.2 sayfa.
 
-Bu çalışma, multi-label bitemporal change classification üzerinde iki
-aşamalı bir karşılaştırma sunmuştur. Aşama~2'de BIT fusion, macro-F1
-ortalamasını mütevazı düzeyde artırırken seed'ler arası varyansı
-belirgin biçimde düşürmektedir; bu varyans düşüşü güvenilir tek sayı
-bildirimi için raporlanmaya değer pratik bir katkıdır. Veri kümesinin
-long-tail nesne ailesi hâlâ darboğazdır; per-class threshold tuning ve
-DBLoss gibi müdahaleler kalibrasyon farkını kapatır ancak ASL'yi geçmez.
-Query2Label heads ve uncertainty-weighted loss gibi ek mimari katmanlar,
-bu veri ölçeğinde aşırı parametre maliyeti karşılığında ortalama bir
-düşüşe yol açmıştır.
+Bu çalışma, multi-label bitemporal change classification üzerinde iki aşamalı bir karşılaştırma sunmuştur. Aşama~2'de BIT fusion, macro-F1 ortalamasını mütevazı düzeyde artırırken seed'ler arası varyansı belirgin biçimde düşürmektedir; bu varyans düşüşü güvenilir tek sayı bildirimi için raporlanmaya değer pratik bir katkıdır. Veri kümesinin long-tail nesne ailesi hâlâ darboğazdır; per-class threshold tuning ve DBLoss gibi müdahaleler kalibrasyon farkını kapatır ancak ASL'yi geçmez. Query2Label heads ve uncertainty-weighted loss gibi ek mimari katmanlar, bu veri ölçeğinde aşırı parametre maliyeti karşılığında ortalama bir düşüşe yol açmıştır.
 
-Pratik açıdan üç çıkarım öne çıkar. Birincisi, sınırlı veri ölçeğinde
-modern bir ConvNet backbone'a (FCMAE ön-eğitimli ConvNeXt-V2) yatırım
-yapmak, ablation'daki en büyük tek sıçrama olarak ek mimari maliyet
-getirmeden $+0{,}030$ macro-F1 sağlar. İkincisi, sabit ve yorumlanabilir
-kayıp ağırlıkları (örn.\ $\{1, 1, 1, 0{,}2\}$), bu ölçekte öğrenilebilir
-uncertainty parametrelerinden çok daha güvenilirdir; UWL eklemenin
-kanonik konfigürasyonun belirgin biçimde altında bir noktada kalması bu
-yargıyı destekler. Üçüncüsü, BIT füzyonunun nesne ailesinde seed
-varyansını yaklaşık yarıya indirmesi, tek-seferlik raporlama gereken
-pratik senaryolarda ortalama kazanım kadar değerli bir katkıdır.
+Pratik açıdan üç çıkarım öne çıkar. Birincisi, sınırlı veri ölçeğinde modern bir ConvNet backbone'a (FCMAE ön-eğitimli ConvNeXt-V2) yatırım yapmak, ablation'daki en büyük tek sıçrama olarak ek mimari maliyet getirmeden $+0{,}030$ macro-F1 sağlar. İkincisi, sabit ve yorumlanabilir kayıp ağırlıkları (örn.\ $\{1, 1, 1, 0{,}2\}$), bu ölçekte öğrenilebilir uncertainty parametrelerinden çok daha güvenilirdir; UWL eklemenin kanonik konfigürasyonun belirgin biçimde altında bir noktada kalması bu yargıyı destekler. Üçüncüsü, BIT füzyonunun nesne ailesinde seed varyansını yaklaşık yarıya indirmesi, tek-seferlik raporlama gereken pratik senaryolarda ortalama kazanım kadar değerli bir katkıdır.
 
-Çalışmanın sınırlamaları açıktır: eşik kalibrasyonu yalnızca DBLoss
-için per-class yapılmış, ASL ve BIT konfigürasyonlarına aynı tuning
-uygulanmamıştır; bu nedenle raporlanan $0{,}5$ eşiği özellikle nadir
-sınıflar için ideal değildir. Augmentation reçetesi standart
-pair-aware tekniklerle sınırlıdır; copy-paste veya kuyruk-bilinçli
-oversampling gibi long-tail'e özgü müdahaleler denenmemiştir.
-Değerlendirme tek bir donmuş bölümleme üzerindedir; cross-validation
-veya alternatif coğrafi/temporal bölünmelerle dirençlilik kontrolü
-gelecek çalışmalara bırakılmıştır.
+Çalışmanın sınırlamaları açıktır: eşik kalibrasyonu yalnızca DBLoss için per-class yapılmış, ASL ve BIT konfigürasyonlarına aynı tuning uygulanmamıştır; bu nedenle raporlanan $0{,}5$ eşiği özellikle nadir sınıflar için ideal değildir. Augmentation reçetesi standart pair-aware tekniklerle sınırlıdır; copy-paste veya kuyruk-bilinçli oversampling gibi long-tail'e özgü müdahaleler denenmemiştir. Değerlendirme tek bir donmuş bölümleme üzerindedir; cross-validation veya alternatif coğrafi/temporal bölünmelerle dirençlilik kontrolü gelecek çalışmalara bırakılmıştır.
 
-Önümüzdeki çalışmalarda DINOv2 öz-denetimli özellikleri, kuyruk-bilinçli
-sampling'in ASL ile birleştirilmesi ve per-class eşik öğreten post-hoc
-adapter modülleri umut verici yönler olarak görünmektedir.
+Önümüzdeki çalışmalarda DINOv2 öz-denetimli özellikleri, kuyruk-bilinçli sampling'in ASL ile birleştirilmesi ve per-class eşik öğreten post-hoc adapter modülleri umut verici yönler olarak görünmektedir.
 
 % =====================================================================
 \bibliographystyle{IEEEtran}
