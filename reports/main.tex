@@ -115,7 +115,7 @@ Optimizer olarak AdamW~\cite{loshchilov2019adamw} kullanılır; head learning ra
 % 0.4 sayfa.
 
 \subsection{Veri kümesi ve bölümleme}
-Bitemporal havadan RGB çiftleri, donmuş train/val/test bölümlemesiyle kullanılır. Çiftlerin yaklaşık \%28'i değişimsizdir (her ailede sıfır etiketli). Aile bazında imbalance oldukça ağırdır: nesne $\approx 270{:}1$, öznitelik $\approx 67{:}1$, olay $\approx 28{:}1$. Bölümler arası dosya adı sızıntısı denetlenmiş ve sıfır çakışma kaydedilmiştir.
+Bitemporal havadan RGB çiftleri, önceden belirlenmiş train/val/test bölümlemesiyle kullanılır. Çiftlerin yaklaşık \%28'i değişimsizdir (her ailede sıfır etiketli). Aile bazında imbalance oldukça ağırdır: nesne $\approx 270{:}1$, öznitelik $\approx 67{:}1$, olay $\approx 28{:}1$. Bölümler arası dosya adı sızıntısı denetlenmiş ve sıfır çakışma kaydedilmiştir.
 
 \subsection{Değerlendirme}
 Birincil metrik macro-F1; yanında micro-F1, macro precision/recall ve mean average precision (mAP) raporlanır. Varsayılan threshold $0{,}5$'tir; bir satır açıkça val split üzerinde per-class threshold tuning yaptığını belirtir. Test-time augmentation (TTA), \{orig, hflip, vflip, rot180\} olasılıklarını ortalar.
@@ -181,7 +181,7 @@ Bu çalışma, multi-label bitemporal change classification üzerinde iki aşama
 
 Pratik açıdan üç çıkarım öne çıkar. Birincisi, sınırlı veri ölçeğinde modern bir ConvNet backbone'a (FCMAE ön-eğitimli ConvNeXt-V2) yatırım yapmak, ablation'daki en büyük tek sıçrama olarak ek mimari maliyet getirmeden $+0{,}030$ macro-F1 sağlar. İkincisi, sabit ve yorumlanabilir kayıp ağırlıkları (örn.\ $\{1, 1, 1, 0{,}2\}$), bu ölçekte öğrenilebilir uncertainty parametrelerinden çok daha güvenilirdir; UWL eklemenin kanonik konfigürasyonun belirgin biçimde altında bir noktada kalması bu yargıyı destekler. Üçüncüsü, BIT füzyonunun nesne ailesinde seed varyansını yaklaşık yarıya indirmesi, tek-seferlik raporlama gereken pratik senaryolarda ortalama kazanım kadar değerli bir katkıdır.
 
-Çalışmanın sınırlamaları açıktır: eşik kalibrasyonu yalnızca DBLoss için per-class yapılmış, ASL ve BIT konfigürasyonlarına aynı tuning uygulanmamıştır; bu nedenle raporlanan $0{,}5$ eşiği özellikle nadir sınıflar için ideal değildir. Augmentation reçetesi standart pair-aware tekniklerle sınırlıdır; copy-paste veya kuyruk-bilinçli oversampling gibi long-tail'e özgü müdahaleler denenmemiştir. Değerlendirme tek bir donmuş bölümleme üzerindedir; cross-validation veya alternatif coğrafi/temporal bölünmelerle dirençlilik kontrolü gelecek çalışmalara bırakılmıştır.
+Çalışmanın sınırlamaları açıktır: eşik kalibrasyonu yalnızca DBLoss için per-class yapılmış, ASL ve BIT konfigürasyonlarına aynı tuning uygulanmamıştır; bu nedenle raporlanan $0{,}5$ eşiği özellikle nadir sınıflar için ideal değildir. Augmentation reçetesi standart pair-aware tekniklerle sınırlıdır; copy-paste veya kuyruk-bilinçli oversampling gibi long-tail'e özgü müdahaleler denenmemiştir. Değerlendirme tek bir önceden belirlenmiş bölümleme üzerindedir; cross-validation veya alternatif coğrafi/temporal bölünmelerle dirençlilik kontrolü gelecek çalışmalara bırakılmıştır.
 
 Önümüzdeki çalışmalarda DINOv2 öz-denetimli özellikleri, kuyruk-bilinçli sampling'in ASL ile birleştirilmesi ve per-class eşik öğreten post-hoc adapter modülleri umut verici yönler olarak görünmektedir.
 
