@@ -66,16 +66,8 @@
       {Aşama~2: birleşik\\çok-görevli (1 model)};
 
   \end{tikzpicture}
-  \caption{Aşama~1 (sol) ve Aşama~2 (sağ). Her iki yapı ConvNeXt-V2
-    Tiny Siamese encoder'ı paylaşır. Aşama~1, her etiket ailesi için
-    bağımsız üç model eğitir; four-way fusion vektörü küçük bir MLP'ye
-    ve sigmoid family head'e beslenir. Aşama~2 aynı encoder'ı korur,
-    aynı MLP'den önce Bitemporal Image Transformer (BIT) fusion bloğunu
-    yerleştirir ve dört head üretir (üç family logit ve bir nochg
-    skaleri); loss'lar fixed task weights ile toplanır. Şekil yalnız
-    her iki aşamanın kanonik yapılandırmasını gösterir; opsiyonel
-    bileşenler (no-change gate, Query2Label heads, uncertainty-weighted
-    loss) Tablo~\ref{tab:ablation}'de ablation satırları olarak
-    raporlanır.}
+  \caption{Aşama~1 (sol) ve Aşama~2 (sağ) kanonik yapılandırmaları.
+    Opsiyonel bileşenler (no-change gate, Query2Label heads, UWL)
+    Tablo~\ref{tab:ablation}'deki ablation satırlarında raporlanır.}
   \label{fig:arch}
 \end{figure*}
