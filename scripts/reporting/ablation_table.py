@@ -92,12 +92,15 @@ ROWS: list[RowSpec] = [
             note="object only (270:1 imbalance)",
             families=("object",)),
     RowSpec("P2: BIT, linear heads, fixed weights  (canonical)",
-            "phase2_bit_only/seed{seed}/metrics_test_tta_gate.json", SEEDS),
+            "phase2_bit_only/seed{seed}/metrics_test_tta.json", SEEDS),
+    RowSpec("P2: canonical, +gate",
+            "phase2_bit_only/seed{seed}/metrics_test_tta_gate.json", SEEDS,
+            note="multiplicative gate from head_nochg"),
     RowSpec("P2: no BIT, linear heads, fixed weights",
-            "phase2_no_bit/seed{seed}/metrics_test_tta_gate.json", SEEDS,
+            "phase2_no_bit/seed{seed}/metrics_test_tta.json", SEEDS,
             note="fusion ablation"),
     RowSpec("P2: BIT, Q2L heads, UWL  (full stack)",
-            "phase2_unified/seed{seed}/metrics_test_tta_gate.json", SEEDS,
+            "phase2_unified/seed{seed}/metrics_test_tta.json", SEEDS,
             note="head + loss ablation"),
 ]
 

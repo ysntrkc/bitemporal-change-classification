@@ -118,9 +118,10 @@ def main() -> None:
         fp, pc, ft, ic = _collect_phase2(model, test_loader, device)
         p2_rows[seed] = {}
         for fam in FAMILIES:
-            gated = fp[fam] * pc[:, None]
-            full = _macro_f1_on_subset(gated, ft[fam], np.ones_like(ic, dtype=bool))
-            sub = _macro_f1_on_subset(gated, ft[fam], ic.astype(bool))
+            # Canonical Phase 2 inference is no-gate; multiplicative gate is
+            # ablation-only (see ablation table). Use raw family probabilities.
+            full = _macro_f1_on_subset(fp[fam], ft[fam], np.ones_like(ic, dtype=bool))
+            sub = _macro_f1_on_subset(fp[fam], ft[fam], ic.astype(bool))
             p2_rows[seed][fam] = {"full": full, "changed": sub}
             print(f"P2 {fam} seed{seed}: full={full:.4f}  changed-only={sub:.4f}")
         del model
@@ -128,7 +129,7 @@ def main() -> None:
 
     # ---- Aggregate ----
     lines = []
-    lines.append("# Changed-subset macro-F1 (test split, EMA, TTA [+ gate for P2])")
+    lines.append("# Changed-subset macro-F1 (test split, EMA, TTA, no gate)")
     lines.append("")
     lines.append("Two columns per family: full = all test pairs (1190 of which "
                  "~71% have a change), changed-only = restricted to is_change=1.")
@@ -149,7 +150,7 @@ def main() -> None:
     lines.append("| " + " | ".join(cells_p1) + " |")
 
     # Phase 2
-    cells_p2 = ["P2 BIT-only (+TTA + gate)"]
+    cells_p2 = ["P2 BIT-only (+TTA, no gate)"]
     for fam in FAMILIES:
         full_vals = np.array([p2_rows[s][fam]["full"] for s in SEEDS if s in p2_rows])
         sub_vals = np.array([p2_rows[s][fam]["changed"] for s in SEEDS if s in p2_rows])

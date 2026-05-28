@@ -10,6 +10,7 @@ All rows: mean ± std over 3 seeds (42, 1337, 2024). DBLoss row is object-only (
 | P1: canonical, +TTA, +gate | 0.3005 ± 0.0102 | 0.2682 ± 0.0122 | 0.2558 ± 0.0063 | **0.2748 ± 0.0230** | multiplicative gate from head_nochg |
 | P1: DBLoss, default 0.5 +TTA  (uncalibrated) | 0.2656 ± 0.0153 | — | — | **—** | object only (270:1 imbalance) |
 | P1: DBLoss, tuned thr +TTA  (calibrated) | 0.2849 ± 0.0075 | — | — | **—** | object only (270:1 imbalance) |
-| P2: BIT, linear heads, fixed weights  (canonical) | 0.3121 ± 0.0104 | 0.2797 ± 0.0032 | 0.2538 ± 0.0062 | **0.2819 ± 0.0292** | 3-seed mean ± std |
-| P2: no BIT, linear heads, fixed weights | 0.2846 ± 0.0230 | 0.2766 ± 0.0074 | 0.2585 ± 0.0079 | **0.2732 ± 0.0134** | fusion ablation |
-| P2: BIT, Q2L heads, UWL  (full stack) | 0.1730 ± 0.0076 | 0.2266 ± 0.0153 | 0.1443 ± 0.0043 | **0.1813 ± 0.0418** | head + loss ablation |
+| P2: BIT, linear heads, fixed weights  (canonical) | 0.3128 ± 0.0099 | 0.2812 ± 0.0025 | 0.2550 ± 0.0055 | **0.2830 ± 0.0290** | 3-seed mean ± std |
+| P2: canonical, +gate | 0.3121 ± 0.0104 | 0.2797 ± 0.0032 | 0.2538 ± 0.0062 | **0.2819 ± 0.0292** | multiplicative gate from head_nochg |
+| P2: no BIT, linear heads, fixed weights | 0.2903 ± 0.0190 | 0.2767 ± 0.0067 | 0.2602 ± 0.0069 | **0.2757 ± 0.0151** | fusion ablation |
+| P2: BIT, Q2L heads, UWL  (full stack) | 0.1730 ± 0.0088 | 0.2262 ± 0.0149 | 0.1441 ± 0.0044 | **0.1811 ± 0.0417** | head + loss ablation |

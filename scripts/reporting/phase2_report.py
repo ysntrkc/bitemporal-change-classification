@@ -16,7 +16,7 @@ VOCAB = json.loads(Path("configs/label_vocab.json").read_text())
 
 def _load_metrics(seed: int) -> dict:
     return json.loads(
-        (RUN_DIR / f"seed{seed}" / "metrics_test_tta_gate.json").read_text()
+        (RUN_DIR / f"seed{seed}" / "metrics_test_tta.json").read_text()
     )
 
 
@@ -78,7 +78,7 @@ def build_table() -> None:
     p1 = _load_phase1_table()
 
     lines: list[str] = []
-    lines.append("# Phase-2 results: BIT-only (TTA + no-change gate, EMA, test split)")
+    lines.append("# Phase-2 results: BIT-only (TTA only, EMA, test split)")
     lines.append("")
     lines.append("Mean ± std over 3 seeds (42, 1337, 2024). All numbers higher is better.")
     lines.append("")
@@ -124,7 +124,7 @@ def build_table() -> None:
 def build_extended_table() -> None:
     """Macro + micro precision/recall side-by-side for the main method only.
 
-    Reported only for canonical Phase 2 (BIT-only, TTA + no-change gate).
+    Reported only for canonical Phase 2 (BIT-only, TTA only).
     Macro-F1 remains the headline metric; this table accompanies it.
     """
     metric_pretty = {
@@ -158,7 +158,7 @@ def build_extended_table() -> None:
     lines.append(
         "Mean ± std over 3 seeds (42, 1337, 2024). Macro-F1 is the headline "
         "metric; micro variants and precision/recall are reported here for the "
-        "canonical Phase 2 configuration only (TTA + no-change gate, EMA, "
+        "canonical Phase 2 configuration only (TTA only, EMA, "
         "test split)."
     )
     lines.append("")
@@ -201,7 +201,7 @@ def plot_per_class_f1() -> None:
         ax.set_yticks(range(len(labels)))
         ax.set_yticklabels(sorted_labels, fontsize=9)
         ax.set_xlim(0, max(0.6, float(sorted_mean.max() + sorted_std.max() + 0.05)))
-        ax.set_xlabel("F1 (test, TTA + no-change gate, mean ± std over 3 seeds)")
+        ax.set_xlabel("F1 (test, TTA only, mean ± std over 3 seeds)")
         ax.set_title(f"Phase-2 BIT-only per-class F1: {fam} ({len(labels)} classes)")
         ax.grid(axis="x", linestyle=":", alpha=0.5)
         fig.tight_layout()

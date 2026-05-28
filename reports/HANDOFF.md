@@ -111,11 +111,12 @@ yazılacağını gösterir.
 | Backbone | ConvNeXt-V2 Tiny, FCMAE pre-trained | |
 | Seed seti | 42, 1337, 2024 | |
 | Aşama 1 macro-F1 ortalama | 0.277 ± 0.023 | data/ablation_table.md |
-| Aşama 2 macro-F1 ortalama | 0.282 ± 0.029 | data/ablation_table.md |
-| Aşama 2 std (no-BIT) | 0.013 (canonical 0.029'un yarısı) | -- |
+| Aşama 2 macro-F1 ortalama | 0.283 ± 0.029 | data/ablation_table.md (no-gate canonical) |
+| Aşama 2 std (no-BIT) | 0.015 (canonical 0.029'un yaklaşık yarısı) | -- |
 | ResNet-50 vs ConvNeXt-V2 fark | +0.030 macro-F1 (A1 0.247 → P1 0.277) | -- |
 | TTA katkısı | +0.006 (no-TTA 0.271 → TTA 0.277) | -- |
-| no-change gate etkisi | -0.002 (null result) | -- |
+| Aşama 1 no-change gate etkisi | -0.002 (null result) | -- |
+| Aşama 2 no-change gate etkisi | -0.001 (null result, ablation satırı) | data/ablation_table.md |
 | DBLoss kalibrasyonsuz | 0.266 (object) | -- |
 | DBLoss tuned thr | 0.285 (object, ASL'nin 0.303'ünü geçmiyor) | -- |
 | Full stack (Q2L+UWL) | 0.181 ± 0.042 (canonical'in altında) | -- |
@@ -133,8 +134,13 @@ yazılacağını gösterir.
 Alternatif: Fig 3'te Aşama 1 muadili (figs/perclass_phase1_*.png) ya da
 Fig 4'te Aşama 1 eğrileri (figs/curves_phase1_*.png) tercih edilebilir.
 
-## Raporlama politikası: metrik kapsamı
+## Raporlama politikası: metrik kapsamı + canonical seçimi
 
+- **Aşama 2 canonical = no-gate** (TTA + EMA + default threshold 0,5).
+  Multiplicative no-change gate yalnız ablation amaçlıdır: Aşama 1'de
+  -0,002, Aşama 2'de -0,001 macro-F1 etkisi yaratır (her ikisi de
+  ölçülebilir bir kazanım sağlamaz). Ablation tablosunda "P2:
+  canonical, +no-change gate" satırı bu null effect'i belgeler.
 - **Ana metrik: macro-F1** (uzun-kuyruklu multi-label için doğru ana
   sayı). Tablo~I (`main_results.tex`) ve Tablo~II (`ablation.tex`)
   yalnız macro-F1 raporlar.
@@ -146,6 +152,9 @@ Fig 4'te Aşama 1 eğrileri (figs/curves_phase1_*.png) tercih edilebilir.
 - `phase1_table.md` ve `phase2_table.md` aile ve ortalama bazında 5
   sütun içerir (macro-F1, micro-F1, P macro, R macro, mAP) -- bunlar
   rapor tabloları için kaynak verisidir; rapora doğrudan girmez.
+- `phase2_extended_table.md` ve `phase1_extended_table.md` 7-sütun
+  genişletilmiş set; LaTeX tablolarına (`main_method_extended.tex`,
+  `phase1_canonical_extended.tex`) kaynak veridir.
 
 ## Önemli noktalar / dikkat
 

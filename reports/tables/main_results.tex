@@ -1,19 +1,19 @@
 \begin{table}[t]
-  \caption{Test split ana sonuçları. EMA ağırlıkları, default threshold
-    $0{,}5$, TTA \{orig, hflip, vflip, rot180\}. Üç seed (42, 1337,
-    2024) üzerinde ortalama $\pm$ standart sapma. $\Delta$ = Aşama~2
-    $-$ Aşama~1.}
+  \caption{Test split ana sonuçları (macro-F1). EMA ağırlıkları, default
+    threshold $0{,}5$, TTA \{orig, hflip, vflip, rot180\}, no-change
+    gate kapalı. Üç seed (42, 1337, 2024) üzerinde ortalama $\pm$
+    standart sapma. $\Delta$ = Aşama~2 $-$ Aşama~1.}
   \label{tab:main}
   \centering
   \begin{tabular}{lccc}
     \toprule
     Aile     & Aşama~1 & Aşama~2 & $\Delta$ \\
     \midrule
-    Nesne    & $0{,}303 \pm 0{,}011$ & $\mathbf{0{,}312 \pm 0{,}010}$ & $+0{,}009$ \\
-    Olay     & $0{,}272 \pm 0{,}014$ & $\mathbf{0{,}280 \pm 0{,}003}$ & $+0{,}008$ \\
-    Öznitelik & $\mathbf{0{,}258 \pm 0{,}005}$ & $0{,}254 \pm 0{,}006$ & $-0{,}004$ \\
+    Nesne    & $0{,}303 \pm 0{,}011$ & $\mathbf{0{,}313 \pm 0{,}010}$ & $+0{,}010$ \\
+    Olay     & $0{,}272 \pm 0{,}014$ & $\mathbf{0{,}281 \pm 0{,}003}$ & $+0{,}009$ \\
+    Öznitelik & $\mathbf{0{,}258 \pm 0{,}005}$ & $0{,}255 \pm 0{,}006$ & $-0{,}003$ \\
     \midrule
-    Ortalama & $0{,}277 \pm 0{,}023$ & $\mathbf{0{,}282 \pm 0{,}029}$ & $+0{,}005$ \\
+    Ortalama & $0{,}277 \pm 0{,}023$ & $\mathbf{0{,}283 \pm 0{,}029}$ & $+0{,}006$ \\
     \bottomrule
   \end{tabular}
 \end{table}

@@ -66,7 +66,8 @@
       {Aşama~2: birleşik\\çok-görevli (1 model)};
 
     \node[font=\scriptsize, below=2mm of p2loss, align=center]
-      {Inference gate: $p_{\text{fam}} \leftarrow p_{\text{fam}} \cdot
+      {Opsiyonel inference gate (ablation):
+        $p_{\text{fam}} \leftarrow p_{\text{fam}} \cdot
         \sigma(\ell_{\text{nochg}})$};
 
   \end{tikzpicture}
@@ -76,8 +77,10 @@
     ve sigmoid family head'e beslenir. Aşama~2 aynı encoder'ı korur,
     aynı MLP'den önce Bitemporal Image Transformer (BIT) fusion bloğunu
     yerleştirir ve dört head üretir (üç family logit ve bir nochg
-    skaleri); loss'lar fixed task weights ile toplanır. Full-stack
-    ablation'da Query2Label heads ve uncertainty-weighted loss
-    doğrudan drop-in ikamelerdir.}
+    skaleri); loss'lar fixed task weights ile toplanır. Multiplicative
+    no-change gate yalnız ablation amaçlı opsiyoneldir -- canonical
+    inference setup'ında devre dışıdır (bkz.\ Tablo~\ref{tab:ablation}).
+    Full-stack ablation'da Query2Label heads ve uncertainty-weighted
+    loss doğrudan drop-in ikamelerdir.}
   \label{fig:arch}
 \end{figure*}

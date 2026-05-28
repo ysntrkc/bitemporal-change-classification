@@ -2,9 +2,9 @@
   \caption{Ana yöntem (Aşama~2 BIT-only, canonical) için genişletilmiş
     metrikler. Macro-F1 ana metrik olarak raporlanır; micro varyantlar
     ve precision/recall yalnızca bu konfigürasyon için verilir
-    (TTA \{orig, hflip, vflip, rot180\}, no-change gate, EMA, default
-    threshold $0{,}5$, test split). Üç seed (42, 1337, 2024) üzerinde
-    ortalama $\pm$ standart sapma.}
+    (TTA \{orig, hflip, vflip, rot180\}, no-change gate kapalı, EMA,
+    default threshold $0{,}5$, test split). Üç seed (42, 1337, 2024)
+    üzerinde ortalama $\pm$ standart sapma.}
   \label{tab:main-extended}
   \centering
   \footnotesize
@@ -13,11 +13,11 @@
     \toprule
     Aile     & macro-F1 & micro-F1 & P (macro) & P (micro) & R (macro) & R (micro) & mAP \\
     \midrule
-    Nesne    & $0{,}312 \pm 0{,}010$ & $0{,}694 \pm 0{,}017$ & $0{,}332 \pm 0{,}023$ & $0{,}643 \pm 0{,}046$ & $0{,}330 \pm 0{,}031$ & $0{,}758 \pm 0{,}026$ & $0{,}272 \pm 0{,}008$ \\
-    Olay     & $0{,}280 \pm 0{,}003$ & $0{,}415 \pm 0{,}002$ & $0{,}253 \pm 0{,}029$ & $0{,}358 \pm 0{,}028$ & $0{,}333 \pm 0{,}044$ & $0{,}503 \pm 0{,}060$ & $0{,}252 \pm 0{,}004$ \\
-    Öznitelik & $0{,}254 \pm 0{,}006$ & $0{,}433 \pm 0{,}012$ & $0{,}222 \pm 0{,}018$ & $0{,}358 \pm 0{,}034$ & $0{,}318 \pm 0{,}036$ & $0{,}555 \pm 0{,}049$ & $0{,}240 \pm 0{,}009$ \\
+    Nesne    & $0{,}313 \pm 0{,}010$ & $0{,}696 \pm 0{,}018$ & $0{,}330 \pm 0{,}023$ & $0{,}639 \pm 0{,}048$ & $0{,}336 \pm 0{,}034$ & $0{,}768 \pm 0{,}028$ & $0{,}274 \pm 0{,}008$ \\
+    Olay     & $0{,}281 \pm 0{,}003$ & $0{,}419 \pm 0{,}002$ & $0{,}252 \pm 0{,}028$ & $0{,}357 \pm 0{,}027$ & $0{,}339 \pm 0{,}047$ & $0{,}513 \pm 0{,}065$ & $0{,}252 \pm 0{,}004$ \\
+    Öznitelik & $0{,}255 \pm 0{,}006$ & $0{,}433 \pm 0{,}010$ & $0{,}222 \pm 0{,}015$ & $0{,}355 \pm 0{,}033$ & $0{,}324 \pm 0{,}042$ & $0{,}562 \pm 0{,}054$ & $0{,}241 \pm 0{,}009$ \\
     \midrule
-    Ortalama & $0{,}282 \pm 0{,}029$ & $0{,}514 \pm 0{,}156$ & $0{,}269 \pm 0{,}056$ & $0{,}453 \pm 0{,}165$ & $0{,}327 \pm 0{,}008$ & $0{,}605 \pm 0{,}135$ & $0{,}255 \pm 0{,}016$ \\
+    Ortalama & $0{,}283 \pm 0{,}029$ & $0{,}516 \pm 0{,}157$ & $0{,}268 \pm 0{,}056$ & $0{,}451 \pm 0{,}164$ & $0{,}333 \pm 0{,}008$ & $0{,}614 \pm 0{,}135$ & $0{,}256 \pm 0{,}017$ \\
     \bottomrule
   \end{tabular}
 \end{table*}
