@@ -1,11 +1,18 @@
 \documentclass[conference]{IEEEtran}
 \IEEEoverridecommandlockouts
 
-% XeLaTeX / LuaLaTeX gerektirir (polyglossia için). Font seçimi yapılmaz;
+% pdfLaTeX, XeLaTeX ve LuaLaTeX ile derlenebilir. Font seçimi yapılmaz;
 % Overleaf varsayılanı (Latin Modern) kullanılır.
-\usepackage{polyglossia}
-\setdefaultlanguage{turkish}
-\setotherlanguage{english}
+\usepackage{iftex}
+\ifPDFTeX
+  \usepackage[utf8]{inputenc}
+  \usepackage[T1]{fontenc}
+  \usepackage[english,main=turkish]{babel}
+\else
+  \usepackage{polyglossia}
+  \setdefaultlanguage{turkish}
+  \setotherlanguage{english}
+\fi
 \usepackage{cite}
 \usepackage{amsmath,amssymb,amsfonts}
 \usepackage{graphicx}
