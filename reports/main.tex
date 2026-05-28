@@ -66,7 +66,7 @@ multi-label classification, change detection, long-tail learning, vision transfo
 \end{IEEEkeywords}
 
 % =====================================================================
-\section{Giriş}
+\section{G{\footnotesize İ}r{\footnotesize İ}ş}
 % 0.5 sayfa. İki zamanlı değişim görevi, çok etiketli kurulum, uzun
 % kuyruk problemi, katkılar.
 
@@ -82,7 +82,7 @@ Bitemporal change classification, aynı coğrafi konumun iki farklı zamana ait 
 Bitemporal change detection, klasik değişim haritalama yaklaşımlarına göre multi-label ayrıştırma ile daha güçlü bir denetim sinyali sağlar; ancak ailelerin birbirinden bağımsız multi-label yapısı ve dengesiz sınıf dağılımı modelleme tarafında ek zorluklar getirir. Bu çalışmanın katkıları üç başlık altında özetlenebilir: (1)~Kontrollü bir ResNet-50 karşılaştırması ile motive edilen modern ConvNeXt-V2~\cite{woo2023convnextv2} backbone seçimi; (2)~Aşama~2'de BIT~\cite{chen2022bit} stili token tabanlı bir fusion bloğunun değerlendirilmesi; (3)~Query2Label~\cite{liu2021q2l}, uncertainty-weighted loss~\cite{kendall2018uwl} ve no-change gate gibi çalışmadığı görülen seçeneklerin dürüstçe raporlanması.
 
 % =====================================================================
-\section{{\footnotesize İ}lgili Çalışmalar}
+\section{{\footnotesize İ}lg{\footnotesize İ}l{\footnotesize İ} Çalışmalar}
 % 0.4 sayfa.
 
 Change detection literatürü son yıllarda transformer tabanlı fusion bloklarının baskınlığına tanık olmuştur; BIT~\cite{chen2022bit} bu eğilimin temsil edici örneklerinden biridir. Multi-label sınıflandırmada Asymmetric Loss (ASL)~\cite{ridnik2021asl} pozitif ve negatif örnekler için ayrı focusing parametreleri tanımlar ve long-tail ortamlarda güçlü bir varsayılan olarak kabul görür. Query2Label~\cite{liu2021q2l} her sınıfa öğrenilebilir bir query atayarak multi-label karar verme problemini bir transformer decoder'a taşır. Long-tail multi-label problemlere odaklı Distribution-Balanced Loss (DBLoss)~\cite{wu2020dbloss} seyrek sınıflar için positive weighting ve negative-tolerant düzeltmeleri ekler. Multi-task ağırlıklandırma için Kendall ve arkadaşları~\cite{kendall2018uwl}, her görev için öğrenilebilir bir uncertainty parametresi öneren bir formülasyon sunar. Backbone seçimimiz modern ConvNeXt-V2~\cite{woo2023convnextv2} ailesine dayanır; karşılaştırma temeli olarak orijinal ResNet-50~\cite{he2016resnet} mimarisini kullanırız.
