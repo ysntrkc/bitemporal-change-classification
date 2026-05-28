@@ -1,0 +1,13 @@
+experiment:
+  phase: 1
+  name: phase1_bit_event
+  family: event
+  n_classes: 12
+  output_dir: results/phase1_bit_event/seed42
+model:
+  fusion:
+    type: bit
+    L: 4
+    depth: 2
+    nhead: 8
+    dropout: 0.1

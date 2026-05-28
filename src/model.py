@@ -174,11 +174,17 @@ class Query2LabelHead(nn.Module):
 
 
 class Phase1Model(nn.Module):
-    """Siamese → GAP → 4-way fusion → MLP → family head (n_classes) + nochg head (1)."""
+    """Siamese → [BIT?] → GAP → 4-way fusion → MLP → family head + nochg head.
+
+    BIT fusion is opt-in via ``cfg['model']['fusion']['type'] = 'bit'``;
+    default ('passthrough' or missing) preserves the canonical Phase-1
+    behavior (GAP straight after the encoder).
+    """
 
     def __init__(self, cfg: dict):
         super().__init__()
         model_cfg = cfg.get("model", {})
+        fusion_cfg = model_cfg.get("fusion", {})
         n_classes = cfg["experiment"]["n_classes"]
 
         self.encoder = SiameseEncoder(
@@ -189,6 +195,22 @@ class Phase1Model(nn.Module):
         dim = self.encoder.dim
         fusion_dim = model_cfg.get("fusion_dim", 512)
         dropout = model_cfg.get("dropout", 0.3)
+
+        fusion_type = fusion_cfg.get("type", "passthrough")
+        if fusion_type not in ("bit", "passthrough"):
+            raise ValueError(f"unknown model.fusion.type {fusion_type!r}")
+        self.fusion_type = fusion_type
+        if fusion_type == "bit":
+            self.bit_fusion = BITFusion(
+                dim=dim,
+                L=int(fusion_cfg.get("L", 4)),
+                nhead=int(fusion_cfg.get("nhead", 8)),
+                depth=int(fusion_cfg.get("depth", 2)),
+                dim_ff=fusion_cfg.get("dim_ff"),
+                dropout=float(fusion_cfg.get("dropout", 0.1)),
+            )
+        else:
+            self.bit_fusion = None
 
         self.fusion = nn.Sequential(
             nn.Linear(4 * dim, fusion_dim),
@@ -201,6 +223,9 @@ class Phase1Model(nn.Module):
 
     def forward(self, a: Tensor, b: Tensor) -> dict[str, Tensor]:
         fa, fb = self.encoder(a, b)
+        if self.fusion_type == "bit":
+            assert self.bit_fusion is not None
+            fa, fb, _ = self.bit_fusion(fa, fb)
         fa_vec = fa.mean(dim=(2, 3))
         fb_vec = fb.mean(dim=(2, 3))
         v = _enhanced_4way_fusion(fa_vec, fb_vec)
