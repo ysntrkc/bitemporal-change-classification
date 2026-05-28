@@ -1,0 +1,167 @@
+% 6 dk sunum -- BLM5135 final
+% pdfLaTeX / XeLaTeX / LuaLaTeX ile derlenebilir.
+\documentclass[10pt,aspectratio=169]{beamer}
+
+\usepackage{iftex}
+\ifPDFTeX
+  \usepackage[utf8]{inputenc}
+  \usepackage[T1]{fontenc}
+  \usepackage[shorthands=off,english,main=turkish]{babel}
+\else
+  \usepackage{polyglossia}
+  \setdefaultlanguage{turkish}
+  \setotherlanguage{english}
+\fi
+
+\usepackage{amsmath,amssymb}
+\usepackage{booktabs}
+\usepackage{graphicx}
+\usepackage{xcolor}
+\graphicspath{{figs/}}
+
+% Tema -- metropolis Overleaf'te default kurulu. Daha sade istersen
+% \usetheme{default} veya \usetheme{Boadilla}.
+\usetheme{metropolis}
+\setbeamertemplate{frame numbering}[fraction]
+
+\title{Çok Etiketli İki Zamanlı Değişim Sınıflandırması}
+\subtitle{Uzun-Kuyruklu Nesne, Olay ve Öznitelik Başlıkları}
+\author{Yasin Tarakçı \\ \small Öğrenci No: 24501130}
+\institute{Yıldız Teknik Üniversitesi \\ BLM5135 -- Derin Öğrenme ve Yapay Sinir Ağları}
+\date{Bahar 2026}
+
+\begin{document}
+
+\maketitle
+
+% ====================================================================
+\begin{frame}{Problem ve Veri Seti}
+  \textbf{Görev:} Bitemporal havadan RGB çifti $(A, B)$ üzerinde çok etiketli değişim sınıflandırması.
+  \vspace{0.6em}
+  \begin{itemize}
+    \item Üç bağımsız etiket ailesi, toplam 48 sigmoid çıktı:
+      \begin{itemize}
+        \item \textbf{Nesne} (12) -- \texttt{building}, \texttt{tree}, \texttt{road}, \ldots
+        \item \textbf{Olay} (12) -- \texttt{build}, \texttt{remove}, \texttt{increase}, \ldots
+        \item \textbf{Öznitelik} (24) -- \texttt{blue}, \texttt{large}, \texttt{empty}, \ldots
+      \end{itemize}
+    \item Donmuş train/val/test bölümleme, çiftlerin $\approx \%28$'i değişimsiz.
+    \item \textbf{Ağır long-tail:} nesne $\approx 270{:}1$, öznitelik $\approx 67{:}1$, olay $\approx 28{:}1$.
+  \end{itemize}
+\end{frame}
+
+% ====================================================================
+\begin{frame}{Yöntem -- İki Aşama, Ortak Backbone}
+  \textbf{Ortak:} ConvNeXt-V2 Tiny Siamese encoder, FCMAE ön-eğitimli.
+  \vspace{0.8em}
+  \begin{columns}[T,onlytextwidth]
+    \column{0.48\textwidth}
+      \textbf{Aşama 1 (kanonik)}
+      \begin{itemize}
+        \item Aile başına tek-görevli model (3 model)
+        \item Four-way fusion $[f_A; f_B; |f_A{-}f_B|; f_A \odot f_B]$
+        \item LayerNorm-MLP + linear head
+        \item \textbf{Asymmetric Loss} ($\gamma^-{=}4$)
+      \end{itemize}
+    \column{0.48\textwidth}
+      \textbf{Aşama 2 (kanonik)}
+      \begin{itemize}
+        \item Tek model, birleşik multi-task
+        \item GAP öncesi \textbf{BIT fusion} bloğu
+          \begin{itemize}
+            \item token attn $\to$ transformer $\to$ cross-attn
+          \end{itemize}
+        \item 4 head (üç aile + nochg)
+        \item Fixed weights $\{1, 1, 1, 0{,}2\}$
+      \end{itemize}
+  \end{columns}
+  \vspace{0.6em}
+  \scriptsize\itshape
+  Ortak eğitim reçetesi: AdamW + LLRD, cosine schedule, EMA $0{,}999$, TTA \{orig, hflip, vflip, rot180\}, 3 seed (42, 1337, 2024).
+\end{frame}
+
+% ====================================================================
+\begin{frame}{Ana Sonuçlar -- Kanonik}
+  \centering
+  \begin{tabular}{lccc}
+    \toprule
+    Aile      & Aşama 1            & Aşama 2                       & $\Delta$ \\
+    \midrule
+    Nesne     & $0{,}303 \pm 0{,}011$ & $\mathbf{0{,}313 \pm 0{,}010}$ & $+0{,}010$ \\
+    Olay      & $0{,}272 \pm 0{,}014$ & $\mathbf{0{,}281 \pm 0{,}003}$ & $+0{,}009$ \\
+    Öznitelik & $\mathbf{0{,}258 \pm 0{,}005}$ & $0{,}255 \pm 0{,}006$ & $-0{,}003$ \\
+    \midrule
+    Ortalama  & $0{,}277 \pm 0{,}023$ & $\mathbf{0{,}283 \pm 0{,}029}$ & $+0{,}006$ \\
+    \bottomrule
+  \end{tabular}
+
+  \vspace{1em}
+  \begin{itemize}
+    \item BIT füzyonu \textbf{mütevazı ortalama kazanç} ($+0{,}006$ macro-F1).
+    \item Profil homojen değil: nesne + olayda artış, özniteliğte ufak düşüş.
+  \end{itemize}
+\end{frame}
+
+% ====================================================================
+\begin{frame}{Genişletilmiş Metrikler ve Varyans Düşüşü}
+  \begin{columns}[T,onlytextwidth]
+    \column{0.55\textwidth}
+      \footnotesize
+      \begin{tabular}{lcccc}
+        \toprule
+        Aile & macro-F1 & micro-F1 & macro P / R & mAP \\
+        \midrule
+        Nesne     & $0{,}313$ & $0{,}696$ & $0{,}330$ / $0{,}336$ & $0{,}274$ \\
+        Olay      & $0{,}281$ & $0{,}419$ & $0{,}252$ / $0{,}339$ & $0{,}252$ \\
+        Öznitelik & $0{,}255$ & $0{,}433$ & $0{,}222$ / $0{,}324$ & $0{,}241$ \\
+        \bottomrule
+      \end{tabular}
+
+      \vspace{0.8em}
+      \normalsize
+      \footnotesize
+      macro $\ll$ micro: uzun kuyruğun makro üzerindeki etkisi belirgin.
+      Olay / öznitelikte recall $>$ precision $\Rightarrow$ aşırı pozitif eğilim.
+
+    \column{0.42\textwidth}
+      \textbf{BIT'in en somut katkısı: \\ seed başına std düşüşü}
+      \vspace{0.5em}
+      \begin{itemize}
+        \item Nesne: $0{,}019 \to \mathbf{0{,}010}$
+        \item Olay:  $0{,}007 \to \mathbf{0{,}003}$
+      \end{itemize}
+      \vspace{0.5em}
+      Tek-seferlik raporlamada ortalama kazanç kadar değerli.
+  \end{columns}
+\end{frame}
+
+% ====================================================================
+\begin{frame}{Ablation -- Ne Çalıştı, Ne Çalışmadı}
+  \begin{itemize}
+    \item[\textcolor{green!60!black}{\checkmark}] \textbf{Backbone} ResNet-50 $\to$ ConvNeXt-V2: $\mathbf{+0{,}030}$ -- ablation'ın en büyük tek katkısı
+    \item[\textcolor{green!60!black}{\checkmark}] TTA \{orig, hflip, vflip, rot180\}: $+0{,}006$
+    \item[\textcolor{green!60!black}{\checkmark}] BIT füzyonu (vs passthrough): $+0{,}007$, std yarıya
+    \vspace{0.4em}
+    \item[\textcolor{red!70!black}{$\times$}] \textbf{No-change gate}: Aşama 1: $-0{,}002$, Aşama 2: $-0{,}001$
+      \begin{itemize}
+        \item \footnotesize Null bulgu; kanonik inference reçetesinden çıkarıldı.
+      \end{itemize}
+    \item[\textcolor{red!70!black}{$\times$}] \textbf{DBLoss} (tuned threshold): $0{,}285$ -- ASL'nin altında
+    \item[\textcolor{red!70!black}{$\times$}] \textbf{Full-stack} (Q2L + UWL): $0{,}181$ -- bu veri ölçeğinde parametre maliyeti amortise olmuyor
+  \end{itemize}
+\end{frame}
+
+% ====================================================================
+\begin{frame}{Sonuç}
+  \begin{itemize}
+    \item Backbone seçimi ($+0{,}030$) tek başına diğer tüm müdahalelerin toplamından büyük.
+    \item BIT'in asıl katkısı \textbf{varyans düşüşü} -- raporlama güvenilirliği.
+    \item Sabit $\{1,1,1,0{,}2\}$ ağırlığı, öğrenilebilir uncertainty'den (UWL) daha iyi çalışıyor.
+    \item Long-tail darboğazı: threshold tuning ile çözülmüyor; SSL veya kuyruk-bilinçli sampling gerekiyor.
+  \end{itemize}
+  \vspace{1.5em}
+  \centering
+  \Large \textbf{Teşekkürler. Sorular?}
+\end{frame}
+
+\end{document}
