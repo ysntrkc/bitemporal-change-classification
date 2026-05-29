@@ -1,6 +1,6 @@
-# Phase-2 BIT-only — extended metrics (main method only)
+# Phase-2 BIT-only extended metrics (TTA, EMA, test split)
 
-Mean ± std over 3 seeds (42, 1337, 2024). Macro-F1 is the headline metric; micro variants and precision/recall are reported here for the canonical Phase 2 configuration only (TTA only, EMA, test split).
+Mean ± std over 3 seeds (42, 1337, 2024).
 
 | family    | macro-F1 | micro-F1 | P (macro) | P (micro) | R (macro) | R (micro) | mAP |
 |---|---:|---:|---:|---:|---:|---:|---:|

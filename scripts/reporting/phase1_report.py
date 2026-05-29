@@ -80,11 +80,6 @@ def build_table() -> None:
 
 
 def build_extended_table() -> None:
-    """Macro + micro precision/recall side-by-side for canonical Phase 1.
-
-    Reported only for the canonical per-family setup (TTA + default
-    threshold 0.5, EMA, test split). Macro-F1 remains the headline.
-    """
     metric_pretty = {
         "macro_f1": "macro-F1",
         "micro_f1": "micro-F1",
@@ -111,14 +106,9 @@ def build_extended_table() -> None:
     rows.append(overall)
 
     lines: list[str] = []
-    lines.append("# Phase-1 canonical — extended metrics (main per-family method)")
+    lines.append("# Phase-1 canonical extended metrics (TTA, EMA, test split)")
     lines.append("")
-    lines.append(
-        "Mean ± std over 3 seeds (42, 1337, 2024). Macro-F1 is the headline "
-        "metric; micro variants and precision/recall are reported here for the "
-        "canonical Phase 1 configuration only (TTA + default threshold 0.5, "
-        "EMA, test split)."
-    )
+    lines.append("Mean ± std over 3 seeds (42, 1337, 2024).")
     lines.append("")
     header = "| family    | " + " | ".join(
         metric_pretty[k] for k in EXTENDED_METRIC_KEYS

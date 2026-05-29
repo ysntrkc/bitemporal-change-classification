@@ -1,6 +1,6 @@
-# Phase-1 canonical — extended metrics (main per-family method)
+# Phase-1 canonical extended metrics (TTA, EMA, test split)
 
-Mean ± std over 3 seeds (42, 1337, 2024). Macro-F1 is the headline metric; micro variants and precision/recall are reported here for the canonical Phase 1 configuration only (TTA + default threshold 0.5, EMA, test split).
+Mean ± std over 3 seeds (42, 1337, 2024).
 
 | family    | macro-F1 | micro-F1 | P (macro) | P (micro) | R (macro) | R (micro) | mAP |
 |---|---:|---:|---:|---:|---:|---:|---:|

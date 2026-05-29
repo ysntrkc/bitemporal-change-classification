@@ -122,11 +122,6 @@ def build_table() -> None:
 
 
 def build_extended_table() -> None:
-    """Macro + micro precision/recall side-by-side for the main method only.
-
-    Reported only for canonical Phase 2 (BIT-only, TTA only).
-    Macro-F1 remains the headline metric; this table accompanies it.
-    """
     metric_pretty = {
         "macro_f1": "macro-F1",
         "micro_f1": "micro-F1",
@@ -153,14 +148,9 @@ def build_extended_table() -> None:
     rows.append(overall)
 
     lines: list[str] = []
-    lines.append("# Phase-2 BIT-only — extended metrics (main method only)")
+    lines.append("# Phase-2 BIT-only extended metrics (TTA, EMA, test split)")
     lines.append("")
-    lines.append(
-        "Mean ± std over 3 seeds (42, 1337, 2024). Macro-F1 is the headline "
-        "metric; micro variants and precision/recall are reported here for the "
-        "canonical Phase 2 configuration only (TTA only, EMA, "
-        "test split)."
-    )
+    lines.append("Mean ± std over 3 seeds (42, 1337, 2024).")
     lines.append("")
     header = "| family    | " + " | ".join(
         metric_pretty[k] for k in EXTENDED_METRIC_KEYS

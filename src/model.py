@@ -174,12 +174,7 @@ class Query2LabelHead(nn.Module):
 
 
 class Phase1Model(nn.Module):
-    """Siamese → [BIT?] → GAP → 4-way fusion → MLP → family head + nochg head.
-
-    BIT fusion is opt-in via ``cfg['model']['fusion']['type'] = 'bit'``;
-    default ('passthrough' or missing) preserves the canonical Phase-1
-    behavior (GAP straight after the encoder).
-    """
+    """Siamese → [BIT?] → GAP → 4-way fusion → MLP → family head + nochg head."""
 
     def __init__(self, cfg: dict):
         super().__init__()

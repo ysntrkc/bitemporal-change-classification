@@ -118,8 +118,6 @@ def main() -> None:
         fp, pc, ft, ic = _collect_phase2(model, test_loader, device)
         p2_rows[seed] = {}
         for fam in FAMILIES:
-            # Canonical Phase 2 inference is no-gate; multiplicative gate is
-            # ablation-only (see ablation table). Use raw family probabilities.
             full = _macro_f1_on_subset(fp[fam], ft[fam], np.ones_like(ic, dtype=bool))
             sub = _macro_f1_on_subset(fp[fam], ft[fam], ic.astype(bool))
             p2_rows[seed][fam] = {"full": full, "changed": sub}

@@ -420,9 +420,6 @@ def main() -> None:
     change_probs = np.concatenate(all_change, axis=0)
     fam_probs = {fam: np.concatenate(all_probs[fam], axis=0) for fam in FAMILIES}
     fam_targets = {fam: np.concatenate(all_targets[fam], axis=0) for fam in FAMILIES}
-    # Canonical inference is no-gate; family probs are reported raw.
-    # change_probs is still displayed as P(değişim) on the figure but
-    # not multiplied into family logits.
 
     per_fam_f1 = {fam: _per_sample_macro_f1(fam_probs[fam], fam_targets[fam])
                   for fam in FAMILIES}
