@@ -1,9 +1,9 @@
 experiment:
   phase: 1
-  name: phase1_bit_attribute
+  name: phase1_attribute_bit
   family: attribute
   n_classes: 24
-  output_dir: results/phase1_bit_attribute/seed42
+  output_dir: results/phase1_attribute_bit/seed42
 model:
   fusion:
     type: bit

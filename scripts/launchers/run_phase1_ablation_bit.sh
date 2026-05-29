@@ -12,14 +12,14 @@ FAMILIES=(object event attribute)
 SEEDS=(42 1337 2024)
 
 mkdir -p results/_logs
-CHAIN_LOG="results/_logs/phase1_bit_chain_$(date +%Y%m%d_%H%M%S).log"
+CHAIN_LOG="results/_logs/phase1_ablation_bit_chain_$(date +%Y%m%d_%H%M%S).log"
 exec > >(tee -a "${CHAIN_LOG}") 2>&1
 
 echo "[chain] start $(date -Is)"
 
 for fam in "${FAMILIES[@]}"; do
   for seed in "${SEEDS[@]}"; do
-    out="results/phase1_bit_${fam}/seed${seed}"
+    out="results/phase1_${fam}_bit/seed${seed}"
     if [[ -f "${out}/best_ema.pth" ]]; then
       echo "[skip-train] ${fam}/seed${seed}"
       continue
@@ -27,7 +27,7 @@ for fam in "${FAMILIES[@]}"; do
     mkdir -p "${out}"
     echo "[train] ${fam} seed=${seed}  $(date -Is)"
     python train_phase1.py \
-      --config "configs/phase1_bit_${fam}.yaml" \
+      --config "configs/phase1_ablation_bit_${fam}.yaml" \
       --seed "${seed}" \
       --output "${out}" 2>&1 | tee "${out}/run.log"
   done
@@ -35,7 +35,7 @@ done
 
 for fam in "${FAMILIES[@]}"; do
   for seed in "${SEEDS[@]}"; do
-    out="results/phase1_bit_${fam}/seed${seed}"
+    out="results/phase1_${fam}_bit/seed${seed}"
     ckpt="${out}/best_ema.pth"
     metrics="${out}/metrics_test_tta.json"
     [[ -f "${ckpt}" ]] || { echo "[skip-eval] ${fam}/seed${seed}: no ckpt"; continue; }
@@ -43,7 +43,7 @@ for fam in "${FAMILIES[@]}"; do
     echo "[eval]  ${fam} seed=${seed}  $(date -Is)"
     python eval_phase1.py \
       --ckpt "${ckpt}" \
-      --config "configs/phase1_bit_${fam}.yaml" \
+      --config "configs/phase1_ablation_bit_${fam}.yaml" \
       --tta --split test 2>&1 | tee -a "${out}/run.log"
   done
 done
