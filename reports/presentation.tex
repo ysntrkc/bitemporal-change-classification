@@ -17,7 +17,25 @@
 \usepackage{booktabs}
 \usepackage{graphicx}
 \usepackage{xcolor}
+\usepackage{tikz}
+\usetikzlibrary{positioning,arrows.meta,calc,fit,backgrounds}
 \graphicspath{{figs/}}
+
+\tikzset{
+  block/.style={draw, rounded corners=2pt, align=center, font=\scriptsize,
+    minimum height=6mm, inner sep=2pt},
+  enc/.style    ={block, fill=gray!18, minimum width=22mm},
+  fuse/.style   ={block, fill=blue!8,  minimum width=26mm},
+  bit/.style    ={block, fill=orange!18, minimum width=26mm},
+  head/.style   ={block, fill=green!12, minimum width=14mm,
+    minimum height=5mm, font=\tiny},
+  loss/.style   ={block, dashed, fill=gray!5, font=\tiny,
+    minimum width=28mm, minimum height=5mm},
+  io/.style     ={font=\scriptsize},
+  arr/.style    ={-{Stealth[length=1.5mm,width=1.2mm]}, semithick},
+  label/.style  ={font=\tiny\itshape, midway, fill=white,
+    inner sep=1pt}
+}
 
 % Tema -- metropolis Overleaf'te default kurulu. Daha sade istersen
 % \usetheme{default} veya \usetheme{Boadilla}.
@@ -78,6 +96,79 @@
   \vspace{0.6em}
   \scriptsize\itshape
   Ortak eğitim reçetesi: AdamW + LLRD, cosine schedule, EMA $0{,}999$, TTA \{orig, hflip, vflip, rot180\}, 3 seed (42, 1337, 2024).
+\end{frame}
+
+% ====================================================================
+\begin{frame}{Mimari -- Aşama 1 vs Aşama 2}
+  \centering
+  \resizebox{!}{0.78\textheight}{%
+    \begin{tikzpicture}[node distance=5mm and 6mm]
+
+      \node[io] (p1A) {$A$};
+      \node[io, right=10mm of p1A] (p1B) {$B$};
+      \node[enc, below=4mm of $(p1A)!0.5!(p1B)$] (p1enc)
+        {ConvNeXt-V2 Tiny\\Siamese encoder (shared)};
+      \node[fuse, below=of p1enc] (p1fuse)
+        {GAP $+$ four-way fusion\\$[f_A;\,f_B;\,|f_A{-}f_B|;\,f_A\odot f_B]$};
+      \node[fuse, below=of p1fuse] (p1mlp)
+        {Linear $\to$ LN $\to$ GELU\\(width 512)};
+      \node[head, below left =4mm and 2mm of p1mlp] (p1head)
+        {family head\\Linear($C_{\!f}$)};
+      \node[head, below right=4mm and 2mm of p1mlp] (p1nc)
+        {nochg head\\Linear(1)};
+      \node[loss, below=15mm of p1mlp] (p1loss)
+        {ASL $\,+\,0{,}2\cdot$ BCE};
+
+      \draw[arr] (p1A) -- (p1enc);
+      \draw[arr] (p1B) -- (p1enc);
+      \draw[arr] (p1enc) -- (p1fuse) node[label] {$f_A,f_B$};
+      \draw[arr] (p1fuse) -- (p1mlp);
+      \draw[arr] (p1mlp.south) -- (p1head.east);
+      \draw[arr] (p1mlp.south) -- (p1nc.west);
+      \draw[arr, dashed] (p1head.south) |- (p1loss.west);
+      \draw[arr, dashed] (p1nc.south)   |- (p1loss.east);
+
+      \node[font=\bfseries\scriptsize, anchor=south, align=center]
+        at ($(p1A.north)!0.5!(p1B.north)+(0,3mm)$)
+        {Aşama 1: aile başına\\tek-görevli (3 model)};
+
+      \node[io, right=40mm of p1B] (p2A) {$A$};
+      \node[io, right=10mm of p2A] (p2B) {$B$};
+      \node[enc, below=4mm of $(p2A)!0.5!(p2B)$] (p2enc)
+        {ConvNeXt-V2 Tiny\\Siamese encoder (shared)};
+      \node[bit, below=of p2enc] (p2bit)
+        {BIT fusion\\token attn $\to$ pre-LN transformer\\
+          $\to$ cross-attn to spatial};
+      \node[fuse, below=of p2bit] (p2mlp)
+        {GAP $+$ four-way fusion\\$+$ MLP (width 512)};
+      \node[head, below=6mm of p2mlp, xshift=-20mm] (p2obj)  {obj\\Linear(12)};
+      \node[head, right=2mm of p2obj]                (p2evt) {evt\\Linear(12)};
+      \node[head, right=2mm of p2evt]                (p2attr){attr\\Linear(24)};
+      \node[head, right=2mm of p2attr]               (p2nc)  {nochg\\Linear(1)};
+      \node[loss, below=6mm of p2evt, xshift=10mm]   (p2loss)
+        {FixedWeightLoss$\{1,1,1,0{,}2\}$};
+
+      \draw[arr] (p2A) -- (p2enc);
+      \draw[arr] (p2B) -- (p2enc);
+      \draw[arr] (p2enc) -- (p2bit) node[label] {$f_A,f_B$};
+      \draw[arr] (p2bit) -- (p2mlp) node[label] {refined};
+      \draw[arr] (p2mlp.south) -- (p2obj.north);
+      \draw[arr] (p2mlp.south) -- (p2evt.north);
+      \draw[arr] (p2mlp.south) -- (p2attr.north);
+      \draw[arr] (p2mlp.south) -- (p2nc.north);
+      \draw[arr, dashed] (p2obj.south)  |- (p2loss.west);
+      \draw[arr, dashed] (p2evt.south)  -- (p2loss.north);
+      \draw[arr, dashed] (p2attr.south) -- ($(p2loss.north)+(6mm,0)$);
+      \draw[arr, dashed] (p2nc.south)   |- (p2loss.east);
+
+      \node[font=\bfseries\scriptsize, anchor=south, align=center]
+        at ($(p2A.north)!0.5!(p2B.north)+(0,3mm)$)
+        {Aşama 2: birleşik\\çok-görevli (1 model)};
+    \end{tikzpicture}%
+  }
+
+  \vspace{0.5em}
+  \scriptsize Ortak ConvNeXt-V2 trunk; Aşama 2 GAP öncesi BIT fusion ekler ve aileleri tek modelde birleştirir.
 \end{frame}
 
 % ====================================================================
@@ -149,6 +240,38 @@
     \item[\textcolor{red!70!black}{$\times$}] \textbf{DBLoss} (tuned threshold): $0{,}285$ -- ASL'nin altında
     \item[\textcolor{red!70!black}{$\times$}] \textbf{Full-stack} (Q2L + UWL): $0{,}181$ -- bu veri ölçeğinde parametre maliyeti amortise olmuyor
   \end{itemize}
+\end{frame}
+
+% ====================================================================
+\begin{frame}{Uzun-Kuyruk -- Aile Başına Per-Class F1}
+  \centering
+  \begin{columns}[T,onlytextwidth]
+    \column{0.32\textwidth}
+      \centering
+      \textbf{\footnotesize Nesne (12 sınıf)}\\[0.2em]
+      \includegraphics[width=\linewidth]{perclass_phase2_object}
+    \column{0.32\textwidth}
+      \centering
+      \textbf{\footnotesize Olay (12 sınıf)}\\[0.2em]
+      \includegraphics[width=\linewidth]{perclass_phase2_event}
+    \column{0.32\textwidth}
+      \centering
+      \textbf{\footnotesize Öznitelik (24 sınıf)}\\[0.2em]
+      \includegraphics[width=\linewidth]{perclass_phase2_attribute}
+  \end{columns}
+  \vspace{0.4em}
+  \scriptsize Sınıflar mean F1'e göre artan sırada. Her ailede birkaç baskın sınıf macro ortalamayı taşıyor; alt-yarıda kalan nadir sınıflar
+  $\mathrm{F1} \approx 0$ -- 270:1 imbalance'in (nesne) ve 67:1'in (öznitelik) doğrudan yansıması.
+\end{frame}
+
+% ====================================================================
+\begin{frame}{Niteliksel Örnekler}
+  \centering
+  \includegraphics[width=0.86\textwidth]{teaser}
+
+  \vspace{0.4em}
+  \scriptsize Yeşil $\checkmark$ doğru pozitif; kırmızı $\times$ kaçırılan; turuncu $\times$ yanlış pozitif. Başarı satırı sık görülen
+  ``\texttt{tree}/\texttt{increase}/\texttt{green}'' kombinasyonu; hata satırı az gözlemlenen sınıflar.
 \end{frame}
 
 % ====================================================================
